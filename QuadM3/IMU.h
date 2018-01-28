@@ -83,7 +83,7 @@ private:
 	 //General
 	 float roll_level_ajust;
 	 float pitch_level_ajust;
-	 float al_mul = 5.0;
+	 float al_mul = 3;
 	 uint32_t prev_dt;
 	 uint16_t dt;
 
