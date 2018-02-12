@@ -30,6 +30,7 @@ int8_t Telemetry::GetData(uint8_t data_available)
     }
     delay(5); //TODO: Check how this delay affect long distast transmission
   }
+  // Serial.println(serial_input);
   String tlm_command = serial_input.substring(0,4);
 
   if(tlm_command == "$als")
@@ -85,6 +86,13 @@ int8_t Telemetry::GetData(uint8_t data_available)
   {
     transmission_speed = getValue(serial_input,',',1).toInt();
     return -1;
+  }
+
+  else if(tlm_command == "$trb")
+  {
+    //throttle bias
+    tlm_throttle_bias = getValue(serial_input,',',1).toInt();
+    return 9;
   }
 
   else if (tlm_command == "test")

@@ -36,6 +36,7 @@ uint16_t esc_1, esc_2, esc_3, esc_4;
 uint16_t throttle;
 uint16_t deltaTime;
 uint16_t alt_hold_val = 0;
+uint16_t throttle_bias = 400;
 
 uint32  loop_timer;
 uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
@@ -134,8 +135,8 @@ void loop()
 			//TODO:
 			//make sure at current altitude the throttle is at throttle hover
 			// make sure Gyro z is not affected by vibrations if yes filter it
-			pid_alt.Compute(imu.Get_Velocity());
-			throttle = THROTTLE_HOVER_VALUE + pid_alt.output;
+			pid_alt.Compute_AH(setPoint_altitude - imu.Get_Altitude(),imu.Get_Velocity());
+			throttle = THROTTLE_MIN_LIMIT + throttle_bias + pid_alt.output;
 		}
 		else throttle = channel[THROTTLE];
 
@@ -222,10 +223,15 @@ void loop()
 			case 8:
 			Send_PidGains();
 			break;
+
+			case 9:
+			throttle_bias = telemetry.tlm_throttle_bias;
+			telemetry.Transmit(String("throttle bias: ") + throttle_bias + "\n");
+			break;
 		}
 	}
 
-	if(transmit_counter >= 50) //Transmit data to ground at 50Hz
+	if(transmit_counter >= 100) //Transmit data to ground at 50Hz
 	{
 		Transmit_Flight_Data(transmit_mode);
 		transmit_counter = 0;
@@ -308,20 +314,20 @@ void RC_toValue()
 			// if(mag_hold) mag_hold_val = imu.Get_Heading();
 
 			alt_hold = !alt_hold;
-			// if(alt_hold){
-			// 	imu.Get_Altitude();
-			// 	Serial1.print("$ah,1,#");
-			// }
-			// else
-			// {
-			// 	Serial1.print("$ah,0,#");
-			// }
+			if(alt_hold){
+				setPoint_altitude = imu.Get_Altitude();
+				Serial1.print("$ah,1,#");
+			}
+			else
+			{
+				Serial1.print("$ah,0,#");
+			}
 		}
 		prev_aux1 = aux1;
 	}
 	else if(channel[YAW] < AUX1_VALUE && aux1) prev_aux1 = 0, aux1 = 0;
 
-	setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
+	// setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
 }
 
 void Write_4Engines()
@@ -556,7 +562,9 @@ void Transmit_Flight_Data(uint8_t mode)
 
 		case 1:
 		//default flight data
-		telemetry.Transmit(String("$fd,1") + "," + battery_voltage);
+		telemetry.Transmit(String("$fd,1")
+		 + "," + battery_voltage
+		 + "," + imu.Get_Altitude());
 		break;
 
 		case 2:

@@ -149,7 +149,7 @@ void IMU::Compute()
 		pitch_level_ajust = 0.0;
 	}
 
-	//acc_raw[2] -= accz_offset;
+	acc_raw[2] -= accz_offset;
 	acc_z = (acc_z * 0.99) + (acc_raw[2] * 0.01) ; 			//Low pass filter to reduce noise
 	float acc_scalar = EARTH_G / (ACC_REST * sq(dt / 1000000.0)); 	//scale=9.8/3600 *sq(dt)
 	z_velocity = (acc_z * acc_scalar) * sq(dt / 1000000.0);			//Velocity calculations
@@ -228,7 +228,6 @@ void IMU::Init_MS5611()
 		fc[offset] = readRegister16(MS5611_CMD_READ_PROM + (offset * 2));
 	}
 	referencePressure = ms5611_readPressure(true);
-	// Serial.println(referencePressure);
 }
 
 int32_t IMU::ms5611_readPressure(bool compensation)

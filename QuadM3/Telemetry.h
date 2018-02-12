@@ -21,6 +21,7 @@ public:
   int8_t GetData(uint8_t data_available);
   uint8_t transmission_speed = 50;
   uint8_t tlm_transmit_flight_data;
+  int16_t tlm_throttle_bias;
   uint8_t pid_setting;
 };
 #endif

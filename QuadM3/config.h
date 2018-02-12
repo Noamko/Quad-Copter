@@ -1,8 +1,8 @@
 #define invert(x) (-x)
 //Sensors
 #define MPU6050
-// #define MS5611
-// #define HMC5883L
+#define MS5611
+#define HMC5883L
 
 //MPU6050
 #define MPU6050_ADDRESS     (0x68)
