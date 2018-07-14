@@ -1,7 +1,7 @@
 #include "IMU.h"
 
 IMU::IMU(){};
-TwoWire SWire(PB10, PB11, SOFT_FAST);
+SoftWire SWire(PB10, PB11, SOFT_FAST);
 
 float IMU::Pitch_Level_Error() { return pitch_level_ajust;}
 float IMU::Roll_Level_Error() { return roll_level_ajust;}
