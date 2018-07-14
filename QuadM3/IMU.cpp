@@ -86,13 +86,12 @@ void IMU::read_HMC5883L()
 
 	//Read data from each axis, 2 registers per axis
 	SWire.requestFrom(HMC5883L_ADDRESS, 6);
-	// if(SWire.available() >= 6){
-		mag_x = SWire.read()<<8; //X msb
-		mag_x |=SWire.read(); //X lsb
-		mag_z = SWire.read()<<8; //Z msb
-		mag_z |= SWire.read(); //Z lsb
-		mag_y = SWire.read()<<8; //Y msb
-		mag_y |= SWire.read(); //Y lsb
+	mag_x = SWire.read()<<8; //X msb
+	mag_x |=SWire.read(); //X lsb
+	mag_z = SWire.read()<<8; //Z msb
+	mag_z |= SWire.read(); //Z lsb
+	mag_y = SWire.read()<<8; //Y msb
+	mag_y |= SWire.read(); //Y lsb
 	// }
 }
 
@@ -102,7 +101,6 @@ void IMU::readMPU6050()
 	SWire.write(0x3B);//Start reading @ register 43h and auto increment with every read.
 	SWire.endTransmission();//End the transmission.
 	SWire.requestFrom(MPU6050_ADDRESS,14);
-	// while(SWire.available() < 14); //if fail to read this will loop forever..fix it
 	acc_raw[1] = SWire.read()<<8| SWire.read();//Add the low and high byte to the acc_x variable.
 	acc_raw[0] = SWire.read()<<8| SWire.read();//Add the low and high byte to the acc_y variable.
 	acc_raw[2] = SWire.read()<<8| SWire.read();//Add the low and high byte to the acc_z variable.
@@ -343,7 +341,6 @@ uint16_t IMU::readRegister16(uint8_t reg)
 	SWire.endTransmission();
 	SWire.beginTransmission(MS5611_ADDRESS);
 	SWire.requestFrom(MS5611_ADDRESS, 2);
-	// while(!SWire.available()) {};
 	uint8_t vha =SWire.read();
 	uint8_t vla = SWire.read();
 	SWire.endTransmission();
@@ -362,7 +359,6 @@ uint32_t IMU::readRegister24(uint8_t reg)
 
   SWire.beginTransmission(MS5611_ADDRESS);
   SWire.requestFrom(MS5611_ADDRESS, 3);
-  // while(!SWire.available()) {};
 	uint8_t vxa = SWire.read();
 	uint8_t vha = SWire.read();
 	uint8_t vla = SWire.read();
