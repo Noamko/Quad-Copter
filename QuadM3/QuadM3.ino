@@ -1,8 +1,9 @@
 #include "IMU.h"
 #include "PID.h"
 #include "config.h"
-#include "Telemetry.h"
-// #include <libmaple/scb.h>
+
+//#include "Telemetry.h" //Telemetry takes 40% of sketch size!!
+//TODO: rewrite this library.
 
 //IMU variables
 IMU imu;
@@ -21,10 +22,10 @@ PID pid_roll, pid_pitch, pid_yaw;
 PID pid_mag;
 PID pid_alt;
 
-//Telemetry
-Telemetry telemetry;
-uint8_t transmit_mode = 1;
-uint8_t transmit_counter = 0;
+//Telemetry (Suspended)
+// Telemetry telemetry;
+// uint8_t transmit_mode = 1;
+// uint8_t transmit_counter = 0;
 ///////////////
 
 //Global variables
@@ -52,7 +53,7 @@ bool battery_connected = false;
 
 void setup() {
 	Serial.begin(115200);
-	telemetry.Init(9600);
+	// telemetry.Init(9600); //Telemetry (Suspended)
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -105,7 +106,7 @@ void setup() {
 	pid_mag.Set_gains(1.2,0.01,3.0);
 	pid_alt.Set_gains(0,0,0);
 
-	Send_PidGains();
+	// Send_PidGains(); //Telemetry (Suspended)
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
 
@@ -176,6 +177,9 @@ void loop()
 		esc_4 = ESC_OFF;
 	}
 	Write_4Engines();
+
+	//Telemetry (Suspended)
+	/*
 	if(Serial1.available())
 	{
 		//Reads data from incoming telemetry buffer.
@@ -237,6 +241,7 @@ void loop()
 		transmit_counter = 0;
 	}
 	else transmit_counter++;
+	*/ //Telemetry (Suspended)
 
 	//Serial Debuging
 	// Serial.println(imu.Get_GyroX_Angle());
@@ -444,6 +449,8 @@ String getValue(String data, char separator, int index){
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
+//Telemetry (Suspended)
+/*
 void Send_PidGains()
 {
 	Serial1.print("$pr,");
@@ -589,3 +596,4 @@ void Transmit_Flight_Data(uint8_t mode)
 		break;
 	}
 }
+*/
