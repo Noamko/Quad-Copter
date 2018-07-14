@@ -1,7 +1,7 @@
 #include "IMU.h"
 #include "PID.h"
 #include "config.h"
-#include "Telemetry.h"
+// #include "Telemetry.h"
 // #include <libmaple/scb.h>
 
 //IMU variables
@@ -22,7 +22,7 @@ PID pid_mag;
 PID pid_alt;
 
 //Telemetry
-Telemetry telemetry;
+// Telemetry telemetry;
 uint8_t transmit_mode = 1;
 uint8_t transmit_counter = 0;
 ///////////////
@@ -51,7 +51,7 @@ bool battery_connected = false;
 
 void setup() {
 	Serial.begin(115200);
-	telemetry.Init(9600);
+	// telemetry.Init(9600);
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -104,7 +104,7 @@ void setup() {
 	pid_mag.Set_gains(1.2,0.01,3.0);
 	pid_alt.Set_gains(0,0,0);
 
-	Send_PidGains();
+	// Send_PidGains();
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
 
@@ -175,66 +175,68 @@ void loop()
 		esc_4 = ESC_OFF;
 	}
 	Write_4Engines();
-	if(Serial1.available())
-	{
-		//Reads data from incoming telemetry buffer.
-		int8_t telemetry_info = telemetry.GetData(Serial1.available());
 
-		//info state machine
-		switch (telemetry_info)
-		{
-			case -1:
-			break;
-
-			case 2:
-			imu.setAL_Mul(telemetry.autolevel_stregth);
-			telemetry.Transmit(String("auto level: ") + telemetry.autolevel_stregth);
-			break;
-
-			case 3:
-			controller_sensativity = telemetry.tlm_controller_sensativity;
-			telemetry.Transmit(String("controller sensativity: ") + controller_sensativity);
-			break;
-
-			case 4:
-			transmit_mode = telemetry.tlm_transmit_flight_data;
-			break;
-
-			case 5:
-			if(!engineStart)
-			{
-				telemetry.Transmit("Calibrating gyro...\n");
-				imu.Calibrate_MPU6050();
-				telemetry.Transmit(String("gyro_offset_x:") + imu.Get_offset(0));
-				telemetry.Transmit(String("gyro_offset_y:") + imu.Get_offset(1));
-				telemetry.Transmit("Calibration complete.\n");
-			}
-			break;
-
-			case 6:
-			Send_PidGains();
-			break;
-
-			case 7:
-			Telemetry_Update_PID(telemetry.pid_setting,telemetry._p,telemetry._i,telemetry._d);
-			break;
-
-			case 8:
-			Send_PidGains();
-			break;
-		}
-	}
-
-	if(transmit_counter >= 50) //Transmit data to ground at 50Hz
-	{
-		Transmit_Flight_Data(transmit_mode);
-		transmit_counter = 0;
-	}
-	else transmit_counter++;
+	//Telemetry
+	// if(Serial1.available())
+	// {
+	// 	//Reads data from incoming telemetry buffer.
+	// 	// int8_t telemetry_info = telemetry.GetData(Serial1.available());
+	//
+	// 	//info state machine
+	// 	switch (telemetry_info)
+	// 	{
+	// 		case -1:
+	// 		break;
+	//
+	// 		case 2:
+	// 		// imu.setAL_Mul(telemetry.autolevel_stregth);
+	// 		// telemetry.Transmit(String("auto level: ") + telemetry.autolevel_stregth);
+	// 		break;
+	//
+	// 		case 3:
+	// 		// controller_sensativity = telemetry.tlm_controller_sensativity;
+	// 		// telemetry.Transmit(String("controller sensativity: ") + controller_sensativity);
+	// 		break;
+	//
+	// 		case 4:
+	// 		// transmit_mode = telemetry.tlm_transmit_flight_data;
+	// 		break;
+	//
+	// 		case 5:
+	// 		if(!engineStart)
+	// 		{
+	// 			// telemetry.Transmit("Calibrating gyro...\n");
+	// 			imu.Calibrate_MPU6050();
+	// 			// telemetry.Transmit(String("gyro_offset_x:") + imu.Get_offset(0));
+	// 			// telemetry.Transmit(String("gyro_offset_y:") + imu.Get_offset(1));
+	// 			// telemetry.Transmit("Calibration complete.\n");
+	// 		}
+	// 		break;
+	//
+	// 		case 6:
+	// 		// Send_PidGains();
+	// 		break;
+	//
+	// 		case 7:
+	// 		// Telemetry_Update_PID(telemetry.pid_setting,telemetry._p,telemetry._i,telemetry._d);
+	// 		break;
+	//
+	// 		case 8:
+	// 		// Send_PidGains();
+	// 		break;
+	// 	}
+	// }
+	//
+	// if(transmit_counter >= 50) //Transmit data to ground at 50Hz
+	// {
+	// 	// Transmit_Flight_Data(transmit_mode);
+	// 	transmit_counter = 0;
+	// }
+	// else transmit_counter++;
 
 	//Serial Debuging
 	// Serial.println(imu.Get_GyroX_Angle());
-	// Serial.println(imu.Get_Altitude());
+	Serial.println(imu.Get_Altitude());
 	// Serial.println(battery_voltage);
 	// Serial.println(imu.Get_Velocity());
 	// Serial.println(pid_alt.output);
@@ -255,11 +257,11 @@ void loop()
 	// Serial.println(setPoint_yaw);
 	// Serial.print(esc_1);
 	// Serial.print(",");
+	// Serial.print(esc_4);
+	// Serial.print(",");
 	// Serial.print(esc_2);
 	// Serial.print(",");
-	// Serial.print(esc_3);
-	// Serial.print(",");
-	// Serial.println(esc_4);
+	// Serial.println(esc_3);
 }
 
 void RC_toValue()
@@ -438,146 +440,146 @@ String getValue(String data, char separator, int index){
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
-void Send_PidGains()
-{
-	Serial1.print("$pr,");
-	Serial1.print(pid_roll.Kp, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_roll.Ki, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_roll.Kd, SERIAL_DEC_SIZE);
-	Serial1.print('\n');
-	delay(500);
-	Serial1.print("$pp,");
-	Serial1.print(pid_pitch.Kp, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_pitch.Ki, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_pitch.Kd, SERIAL_DEC_SIZE);
-	Serial1.print('\n');
-	delay(500);
+// void Send_PidGains()
+// {
+// 	Serial1.print("$pr,");
+// 	Serial1.print(pid_roll.Kp, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_roll.Ki, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_roll.Kd, SERIAL_DEC_SIZE);
+// 	Serial1.print('\n');
+// 	delay(500);
+// 	Serial1.print("$pp,");
+// 	Serial1.print(pid_pitch.Kp, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_pitch.Ki, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_pitch.Kd, SERIAL_DEC_SIZE);
+// 	Serial1.print('\n');
+// 	delay(500);
+//
+// 	Serial1.print("$py,");
+// 	Serial1.print(pid_yaw.Kp, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_yaw.Ki, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_yaw.Kd, SERIAL_DEC_SIZE);
+// 	Serial1.print('\n');
+//
+// 	delay(500);
+// 	Serial1.print("$pa,");
+// 	Serial1.print(pid_alt.Kp, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_alt.Ki, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_alt.Kd, SERIAL_DEC_SIZE);
+// 	Serial1.print('\n');
+// 	delay(500);
+// 	Serial1.print("$pm,");
+// 	Serial1.print(pid_mag.Kp, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_mag.Ki, SERIAL_DEC_SIZE);
+// 	Serial1.print(",");
+// 	Serial1.print(pid_mag.Kd, SERIAL_DEC_SIZE);
+// 	Serial1.print('\n');
+// 	delay(500);
+// }
 
-	Serial1.print("$py,");
-	Serial1.print(pid_yaw.Kp, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_yaw.Ki, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_yaw.Kd, SERIAL_DEC_SIZE);
-	Serial1.print('\n');
-
-	delay(500);
-	Serial1.print("$pa,");
-	Serial1.print(pid_alt.Kp, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_alt.Ki, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_alt.Kd, SERIAL_DEC_SIZE);
-	Serial1.print('\n');
-	delay(500);
-	Serial1.print("$pm,");
-	Serial1.print(pid_mag.Kp, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_mag.Ki, SERIAL_DEC_SIZE);
-	Serial1.print(",");
-	Serial1.print(pid_mag.Kd, SERIAL_DEC_SIZE);
-	Serial1.print('\n');
-	delay(500);
-}
-
-void Telemetry_Update_PID(uint8_t pid_s,float _nP,float _nI,float _nD)
-{
-	switch(pid_s)
-	{
-		case 0:
-		pid_roll.Set_gains(_nP, _nI, _nD);
-		Serial1.print("$pr,");
-		Serial1.print(pid_roll.Kp, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_roll.Ki, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_roll.Kd, SERIAL_DEC_SIZE);
-		Serial1.print('\n');
-		break;
-
-		case 1:
-		pid_pitch.Set_gains(_nP, _nI, _nD);
-		Serial1.print("$pp,");
-		Serial1.print(pid_pitch.Kp, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_pitch.Ki, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_pitch.Kd, SERIAL_DEC_SIZE);
-		Serial1.print('\n');
-		break;
-
-		case 2:
-		pid_yaw.Set_gains(_nP, _nI, _nD);
-		Serial1.print("$py,");
-		Serial1.print(pid_yaw.Kp, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_yaw.Ki, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_yaw.Kd, SERIAL_DEC_SIZE);
-		Serial1.print('\n');
-		break;
-
-		case 3:
-		pid_alt.Set_gains(_nP, _nI, _nD);
-		Serial1.print("$pa,");
-		Serial1.print(pid_alt.Kp, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_alt.Ki, SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_alt.Kd, SERIAL_DEC_SIZE);
-		Serial1.print('\n');
-		break;
-
-		case 4:
-		pid_mag.Set_gains(_nP, _nI, _nD);
-		Serial1.print("$pm,");
-		Serial1.print(pid_mag.Kp,SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_mag.Ki,SERIAL_DEC_SIZE);
-		Serial1.print(",");
-		Serial1.print(pid_mag.Kd,SERIAL_DEC_SIZE);
-		Serial1.print('\n');
-		break;
-	}
-}
+// void Telemetry_Update_PID(uint8_t pid_s,float _nP,float _nI,float _nD)
+// {
+// 	switch(pid_s)
+// 	{
+// 		case 0:
+// 		pid_roll.Set_gains(_nP, _nI, _nD);
+// 		Serial1.print("$pr,");
+// 		Serial1.print(pid_roll.Kp, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_roll.Ki, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_roll.Kd, SERIAL_DEC_SIZE);
+// 		Serial1.print('\n');
+// 		break;
+//
+// 		case 1:
+// 		pid_pitch.Set_gains(_nP, _nI, _nD);
+// 		Serial1.print("$pp,");
+// 		Serial1.print(pid_pitch.Kp, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_pitch.Ki, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_pitch.Kd, SERIAL_DEC_SIZE);
+// 		Serial1.print('\n');
+// 		break;
+//
+// 		case 2:
+// 		pid_yaw.Set_gains(_nP, _nI, _nD);
+// 		Serial1.print("$py,");
+// 		Serial1.print(pid_yaw.Kp, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_yaw.Ki, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_yaw.Kd, SERIAL_DEC_SIZE);
+// 		Serial1.print('\n');
+// 		break;
+//
+// 		case 3:
+// 		pid_alt.Set_gains(_nP, _nI, _nD);
+// 		Serial1.print("$pa,");
+// 		Serial1.print(pid_alt.Kp, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_alt.Ki, SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_alt.Kd, SERIAL_DEC_SIZE);
+// 		Serial1.print('\n');
+// 		break;
+//
+// 		case 4:
+// 		pid_mag.Set_gains(_nP, _nI, _nD);
+// 		Serial1.print("$pm,");
+// 		Serial1.print(pid_mag.Kp,SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_mag.Ki,SERIAL_DEC_SIZE);
+// 		Serial1.print(",");
+// 		Serial1.print(pid_mag.Kd,SERIAL_DEC_SIZE);
+// 		Serial1.print('\n');
+// 		break;
+// 	}
+// }
 
 
-void Transmit_Flight_Data(uint8_t mode)
-{
-	switch(mode)
-	{
-		case 0:
-		//none
-		break;
-
-		case 1:
-		//default flight data
-		telemetry.Transmit(String("$fd,1") + "," + battery_voltage);
-		break;
-
-		case 2:
-		//IMU data only + battery
-		telemetry.Transmit(String("$fd,2")
-		+ "," + battery_voltage
-		+ "," + imu.Get_GyroX()
-		+ "," + imu.Get_GyroY()
-		+ "," + imu.Get_Heading());
-		break;
-
-		case 3:
-		//Nav data
-		//TODO: navigation data
-		break;
-
-		//Extras
-		case 4:
-		telemetry.Transmit(String("$fd,3")
-		+ "," + battery_voltage
-		+ "," + deltaTime);
-		break;
-	}
-}
+// void Transmit_Flight_Data(uint8_t mode)
+// {
+// 	switch(mode)
+// 	{
+// 		case 0:
+// 		//none
+// 		break;
+//
+// 		case 1:
+// 		//default flight data
+// 		telemetry.Transmit(String("$fd,1") + "," + battery_voltage);
+// 		break;
+//
+// 		case 2:
+// 		//IMU data only + battery
+// 		telemetry.Transmit(String("$fd,2")
+// 		+ "," + battery_voltage
+// 		+ "," + imu.Get_GyroX()
+// 		+ "," + imu.Get_GyroY()
+// 		+ "," + imu.Get_Heading());
+// 		break;
+//
+// 		case 3:
+// 		//Nav data
+// 		//TODO: navigation data
+// 		break;
+//
+// 		//Extras
+// 		case 4:
+// 		telemetry.Transmit(String("$fd,3")
+// 		+ "," + battery_voltage
+// 		+ "," + deltaTime);
+// 		break;
+// 	}
+// }
