@@ -9,7 +9,6 @@ class PID
 public:
 	PID();
 	void Compute(float error);
-	void Compute_AH(float error,float vel);
 	void Set_gains(float k_p,float k_i,float k_d);
 	void Reset();
 

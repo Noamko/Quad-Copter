@@ -2,8 +2,6 @@
 #include "PID.h"
 #include "config.h"
 
-//#include "Telemetry.h" //Telemetry takes 40% of sketch size!!
-//TODO: rewrite this library.
 
 //IMU variables
 IMU imu;
@@ -14,37 +12,31 @@ uint8_t aux1,prev_aux1;
 float controller_sensativity = 3.0f;
 
 //PID variables
-#define  K_P 1.85
-#define  K_I 0.04
+#define  K_P 1.8
+#define  K_I 0.03
 #define  K_D 6.5
 
 PID pid_roll, pid_pitch, pid_yaw;
 PID pid_mag;
 PID pid_alt;
 
-//Telemetry (Suspended)
-// Telemetry telemetry;
-// uint8_t transmit_mode = 1;
-// uint8_t transmit_counter = 0;
-///////////////
-
 //Global variables
-int16_t battery_voltage = 0;
+int16_t battery_voltage;
 int16_t setPoint_roll,setPoint_pitch,setPoint_yaw;
-uint16_t setPoint_altitude;
-uint16_t setPoint_mag;
+float setPoint_altitude;
+float pressure_setPoint;
+float setPoint_mag;
 uint16_t esc_1, esc_2, esc_3, esc_4;
-uint16_t throttle;
+uint16_t throttle, prev_throttle;
 uint16_t deltaTime;
-uint16_t alt_hold_val = 0;
-uint16_t throttle_bias = 400;
+uint16_t throttle_bias = 350;
 
 uint32  loop_timer;
 uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
 uint32  prev_deltaTime;
 
-float mag_hold_val = 0;
-float voltage_compensation = 0;
+float mag_hold_val;
+float voltage_compensation;
 
 bool mag_hold = false;
 bool alt_hold = false;
@@ -53,7 +45,6 @@ bool battery_connected = false;
 
 void setup() {
 	Serial.begin(115200);
-	// telemetry.Init(9600); //Telemetry (Suspended)
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -100,13 +91,13 @@ void setup() {
 
 	imu.Init();
 	delay(250);
+
 	pid_roll.Set_gains(K_P, K_I, K_D);
 	pid_pitch.Set_gains(K_P, K_I, K_D);
 	pid_yaw.Set_gains(2.5, 0.07, 0.03);
 	pid_mag.Set_gains(1.2,0.01,3.0);
-	pid_alt.Set_gains(0,0,0);
+	pid_alt.Set_gains(1.5,0,0);
 
-	// Send_PidGains(); //Telemetry (Suspended)
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
 
@@ -132,14 +123,15 @@ void loop()
 		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
 		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ());
 
-		if(alt_hold){
-			//TODO:
-			//make sure at current altitude the throttle is at throttle hover
-			// make sure Gyro z is not affected by vibrations if yes filter it
-			pid_alt.Compute_AH(setPoint_altitude - imu.Get_Altitude(),imu.Get_Velocity());
-			throttle = THROTTLE_MIN_LIMIT + throttle_bias + pid_alt.output;
+		pid_alt.Compute(imu.Get_pressure() - pressure_setPoint);
+
+		if(channel[THROTTLE] > 1150 || (prev_throttle - throttle > 100))
+		{
+			throttle = MIN_THROTTLE_VALUE + throttle_bias + pid_alt.output;
 		}
-		else throttle = channel[THROTTLE];
+		else throttle = MIN_THROTTLE_VALUE + throttle_bias - 100; 
+
+		// throttle = channel[THROTTLE];
 
 		throttle = constrain(throttle,THROTTLE_MIN_LIMIT,THROTTLE_MAX_LIMIT);
 
@@ -158,11 +150,13 @@ void loop()
 		else battery_connected = false;
 
 		//add the battery compensation to each motor.
-		esc_1 += esc_1 * voltage_compensation;
-		esc_2 += esc_2 * voltage_compensation;
-		esc_3 += esc_3 * voltage_compensation;
-		esc_4 += esc_4 * voltage_compensation;
-
+		if(battery_connected)
+		{
+			esc_1 += esc_1 * voltage_compensation;
+			esc_2 += esc_2 * voltage_compensation;
+			esc_3 += esc_3 * voltage_compensation;
+			esc_4 += esc_4 * voltage_compensation;
+		}
 
 		esc_1 = constrain(esc_1, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
 		esc_2 = constrain(esc_2, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
@@ -170,89 +164,29 @@ void loop()
 		esc_4 = constrain(esc_4, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
 
 	}
-	else { //Turn engines off
+
+	else 
+	{ //Turn engines off
 		esc_1 = ESC_OFF;
 		esc_2 = ESC_OFF;
 		esc_3 = ESC_OFF;
 		esc_4 = ESC_OFF;
 	}
+
 	Write_4Engines();
 
-	//Telemetry (Suspended)
-	/*
-	if(Serial1.available())
-	{
-		//Reads data from incoming telemetry buffer.
-		int8_t telemetry_info = telemetry.GetData(Serial1.available());
-
-		//info state machine
-		switch (telemetry_info)
-		{
-			case -1:
-			break;
-
-			case 2:
-			imu.setAL_Mul(telemetry.autolevel_stregth);
-			telemetry.Transmit(String("auto level: ") + telemetry.autolevel_stregth);
-			break;
-
-			case 3:
-			controller_sensativity = telemetry.tlm_controller_sensativity;
-			telemetry.Transmit(String("controller sensativity: ") + controller_sensativity);
-			break;
-
-			case 4:
-			transmit_mode = telemetry.tlm_transmit_flight_data;
-			break;
-
-			case 5:
-			if(!engineStart)
-			{
-				telemetry.Transmit("Calibrating gyro...\n");
-				imu.Calibrate_MPU6050();
-				telemetry.Transmit(String("gyro_offset_x:") + imu.Get_offset(0));
-				telemetry.Transmit(String("gyro_offset_y:") + imu.Get_offset(1));
-				telemetry.Transmit("Calibration complete.\n");
-			}
-			break;
-
-			case 6:
-			Send_PidGains();
-			break;
-
-			case 7:
-			Telemetry_Update_PID(telemetry.pid_setting,telemetry._p,telemetry._i,telemetry._d);
-			break;
-
-			case 8:
-			Send_PidGains();
-			break;
-
-			case 9:
-			throttle_bias = telemetry.tlm_throttle_bias;
-			telemetry.Transmit(String("throttle bias: ") + throttle_bias + "\n");
-			break;
-		}
-	}
-
-	if(transmit_counter >= 100) //Transmit data to ground at 50Hz
-	{
-		Transmit_Flight_Data(transmit_mode);
-		transmit_counter = 0;
-	}
-	else transmit_counter++;
-	*/ //Telemetry (Suspended)
+	while(micros() - loop_timer < LOOP_TIME); //should sync loop speed with esc's, not sure if neccecery
+	loop_timer = micros();
 
 	//Serial Debuging
+	// Serial.println(imu.Get_pressure());
 	// Serial.println(imu.Get_GyroX_Angle());
 	// Serial.println(imu.Get_Altitude());
 	// Serial.println(battery_voltage);
 	// Serial.println(imu.Get_Velocity());
-	// Serial.println(pid_alt.output);
+	Serial.println(pid_alt.output);
 	// Serial.println(throttle);
 	// Serial.println(imu.Get_Heading());
-	// Serial.println(pid_alt.output);
-	// Serial.print(channel[ROLL]);
 	// Serial.print(",");
 	// Serial.print(channel[PITCH]);
 	// Serial.print(", ");
@@ -315,31 +249,30 @@ void RC_toValue()
 	if(channel[YAW] > AUX1_VALUE && !aux1) {
 		aux1 = 1;
 		if(!prev_aux1){ //single Click command
+			// GPIOC_BASE->BRR = (0b1 << 13);
 			// mag_hold = !mag_hold;
 			// if(mag_hold) mag_hold_val = imu.Get_Heading();
-
+			engineStart = false;
 			alt_hold = !alt_hold;
 			if(alt_hold){
-				setPoint_altitude = imu.Get_Altitude();
-				Serial1.print("$ah,1,#");
+				// Serial1.print("$ah,1,#"); Telemetry (Suspended)
+				// pressure_setPoint = imu.Get_pressure();
 			}
 			else
 			{
-				Serial1.print("$ah,0,#");
+				// Serial1.print("$ah,0,#"); Telemetry (Suspended)
 			}
 		}
 		prev_aux1 = aux1;
 	}
 	else if(channel[YAW] < AUX1_VALUE && aux1) prev_aux1 = 0, aux1 = 0;
 
-	// setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
+	setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
+	pressure_setPoint = imu.Pressure_from_altitude(imu.Get_refPerssure(),setPoint_altitude);
 }
 
 void Write_4Engines()
 {
-	while(micros() - loop_timer < 4000);
-	loop_timer = micros();
-
 	TIMER4_BASE->CCR1 = esc_1;
 	TIMER4_BASE->CCR2 = esc_2;
 	TIMER4_BASE->CCR3 = esc_3;
@@ -381,7 +314,7 @@ bool StartEngines()
 	&& channel[YAW] < AUX2_VALUE
 	&& !engineStart)
 	 {
-		imu.Calibrate_MPU6050();
+		imu.Calibrate();
 	}
 	return engineStart;
 }

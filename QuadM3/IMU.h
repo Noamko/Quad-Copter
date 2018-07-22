@@ -1,8 +1,7 @@
 #ifndef IMU_H
 #define IMU_H
 
-
-#include <SoftWire.h>
+#include <Wire.h>
 #include <Arduino.h>
 #include "config.h"
 
@@ -13,16 +12,17 @@ public:
 	void Init();
 	void reset();
 	void Compute();
-	void Calibrate_MPU6050();
+	void Calibrate();
 	void setAL_Mul(float mul);
-	void SetOverSampling(uint8_t osr);
 	float Roll_Level_Error();
 	float Pitch_Level_Error();
-	float Get_Altitude();
 	float Get_Heading();
 	float Get_GyroX_Angle();
 	float Get_GyroY_Angle();
-	float Get_Velocity();
+	float Get_pressure();
+	float Pressure_from_altitude(float ref_p,float alt);
+	float Get_refPerssure();
+	float Get_altitude();
 	float Get_offset(uint8_t xy);
 	int16_t Get_AccX();
 	int16_t Get_AccY();
@@ -31,32 +31,31 @@ public:
 	int16_t Get_GyroX();
 	int16_t Get_GyroY();
 	int16_t Get_GyroZ();
-
+	void Calculate_pressure(uint8_t OSR);
 
 private:
 	void InitHMC58331();
 	void Init_MS5611();
 	void InitMPU6050();
-	void reset_MS5611();
 	void readMPU6050();
 	void read_HMC5883L();
-	float Calculate_Estimated_Altitude(bool compensation = false);
-	int32_t ms5611_readPressure(bool compensation = false);
-	uint16_t readRegister16(uint8_t reg);
-	uint32_t readRegister24(uint8_t reg);
 
 	//MS5611 variables
-	float altitude;
-	float est_alt;
-	float prev_alt;
-	float referencePressure;
-	float baro_vel;
-	uint32_t D1,D2;
-	int32_t TEMP2;
-	uint16_t fc[6];
-	uint8_t ct = CT;
-	uint8_t skip_case = 0;
-	int64_t OFF2, SENS2;
+	uint8_t temperature_read_counter = 0;
+	uint8_t pressure_read_counter = 0;
+	uint16_t C[7];
+	uint32_t D1, D2;
+	int32_t dT,dT_C5, actual_temperature, actual_pressure,ref_pressure;
+	int64_t OFF,OFF_C2,SENS,SENS_C1;
+	int64_t temp_C6;
+	int32_t avarage_pressure_sample[20];
+	int32_t avarage_temperature_sample[5];
+	uint8_t avarage_pressure_index = 0;
+	uint8_t avarage_temperature_index = 0;
+	float pressure_avarage_total, temperature_avarage_total;
+	float avarage_pressure,avarage_temperature;
+	float LPF_pressure,pressure_diff;
+	float actual_altitude, reletive_altitude;
 
 	//HMC5883L
 	float mag_angle;
@@ -69,8 +68,8 @@ private:
 	float gyro_data[3];
 	float acc_angle[2];
 	float gyro_angle[2];
-	float gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
-	float gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
+	double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
+	double gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
 	float gyro_offset[3];
 	float z_velocity;
 	int16_t gyro_raw[3];
@@ -86,6 +85,5 @@ private:
 	 float al_mul = 3;
 	 uint32_t prev_dt;
 	 uint16_t dt;
-
 };
 #endif
