@@ -2,7 +2,7 @@
 //Sensors
 #define MPU6050
 #define MS5611
-// #define HMC5883L
+#define HMC5883L
 
 //MPU6050
 #define MPU6050_ADDRESS     	(0x68)
@@ -52,3 +52,7 @@
 #define MAX_SERIAL_BUFFER		(30)
 #define VD_SCALE            	(0.3287671232876712)
 #define LOOP_TIME           	(2500)
+
+//Telemetry
+#define AT_PIN 					(PC14)
+#define BUFFER_SIZE				(16)

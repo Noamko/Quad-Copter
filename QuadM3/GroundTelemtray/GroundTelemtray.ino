@@ -1,17 +1,23 @@
-#include <SoftwareSerial.h>
+// #include <SoftwareSerial.h>
 
-SoftwareSerial hc_12(7,6);
+// SoftwareSerial hc_12(4,3);
 
 String serial_input;
 String serial_output;
+
+uint16_t baudrate;
+uint16_t packet_size, prev_packet_size;
+uint8_t checksum = 0;
+char in_buffer[100];
+
 void setup() {
-     pinMode(13,OUTPUT);
+     pinMode(5,OUTPUT);
+     Serial1.begin(1200);
      Serial.begin(9600);
-     hc_12.begin(9600);
+     digitalWrite(5,1);
 }
 
 void loop() {
-
   GetCommands();
   GetTelemetry();
 }
@@ -27,17 +33,47 @@ void GetCommands()
             serial_input += c;
             delay(10);
        }
-       hc_12.print(serial_input);
+       Serial1.flush();
+       Serial1.print(serial_input);
   }
 }
 
 void GetTelemetry()
 {
-  if(hc_12.available())
+  packet_size = Serial1.available();
+  if(packet_size > 0)
   {
-      int how_many = hc_12.available();
-      char buffer[50];
-      int c = hc_12.readBytes(buffer,how_many);
-      Serial.print(buffer);
+    if(packet_size == prev_packet_size) checksum++;
+    else checksum = 0;
+
+    if(checksum >= 10)
+    {
+      memset(in_buffer,0,sizeof(in_buffer));
+      Serial1.readBytes(in_buffer,packet_size);
+      Serial.print((char*)in_buffer);
+    }
+    prev_packet_size = packet_size;
   }
 }
+/*
+bool Telemetry::Receive()
+{
+  packet_size = Serial1.available();
+  if(packet_size > 0)
+  {
+    if(packet_size == prev_packet_size) checksum++;
+    else checksum = 0;
+
+    if(checksum >= 10) //TODO: change 10 after testing with long distance to a pre defined number
+    {
+      //Packet ready
+      memset(in_buffer, 0, sizeof(in_buffer)); //Clear the buffer
+      Serial1.readBytes(in_buffer,packet_size);
+
+      return 1;
+    }
+    prev_packet_size = packet_size;
+    return 0;
+  } else return 1;
+}
+*/

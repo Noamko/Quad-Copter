@@ -32,6 +32,7 @@ public:
 	int16_t Get_GyroY();
 	int16_t Get_GyroZ();
 	void Calculate_pressure(uint8_t OSR);
+	float roll_angle_offset = 1.5f, pitch_angle_offset = -6.0f;
 
 private:
 	void InitHMC58331();

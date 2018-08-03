@@ -1,6 +1,7 @@
 #include "IMU.h"
 #include "PID.h"
 #include "config.h"
+#include "Telemetry.h"
 
 
 //IMU variables
@@ -27,9 +28,9 @@ float setPoint_altitude;
 float pressure_setPoint;
 float setPoint_mag;
 uint16_t esc_1, esc_2, esc_3, esc_4;
-uint16_t throttle, prev_throttle;
+uint16_t throttle, prev_throttle,throttle_base;
 uint16_t deltaTime;
-uint16_t throttle_bias = 350;
+uint16_t throttle_bias = 330;
 
 uint32  loop_timer;
 uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
@@ -39,12 +40,17 @@ float mag_hold_val;
 float voltage_compensation;
 
 bool mag_hold = false;
-bool alt_hold = false;
+bool alt_hold = true;
 bool engineStart = false;
 bool battery_connected = false;
 
+
+Telemetry telemetry;
+uint16_t telemetry_transmit_counter;
+
 void setup() {
-	Serial.begin(115200);
+	Serial.begin(9600);
+	telemetry.Init(1200);
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -53,6 +59,7 @@ void setup() {
 	pinMode(PB7, PWM);
 	pinMode(PB8, PWM);
 	pinMode(PB9, PWM);
+
 
 	//Initilize Timers 3 & 4
 	TIMER4_BASE->CR1 = TIMER_CR1_CEN | TIMER_CR1_ARPE;  //Enable Timer 4
@@ -88,21 +95,79 @@ void setup() {
 	TIMER3_BASE->PSC = 71;
 	TIMER3_BASE->ARR = 0xFFFF;
 	TIMER3_BASE->DCR = 0;
-
 	imu.Init();
 	delay(250);
 
 	pid_roll.Set_gains(K_P, K_I, K_D);
 	pid_pitch.Set_gains(K_P, K_I, K_D);
-	pid_yaw.Set_gains(2.5, 0.07, 0.03);
+	pid_yaw.Set_gains(12.0, 0.15, 10.0);
 	pid_mag.Set_gains(1.2,0.01,3.0);
-	pid_alt.Set_gains(1.5,0,0);
+	pid_alt.Set_gains(3.0,0.025,4);
 
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
 
 void loop()
 {
+	if(telemetry.Receive())
+	{
+		//telemetry available..
+		//execute commands
+		String data_in = String(telemetry.in_buffer);
+		if(data_in.startsWith("PID"))
+		{
+			float _p = atof(getValue(data_in,',',1));
+			float _i = atof(getValue(data_in,',',2));
+			float _d = atof(getValue(data_in,',',3));
+
+			pid_yaw.Set_gains(_p,_i,_d);
+		}
+
+		else if(data_in.startsWith("BIAS"))
+		{
+			throttle_bias = atoi(getValue(data_in,',',1));
+		}
+
+		else if(data_in.startsWith("TRR"))
+		{
+			imu.roll_angle_offset = atof(getValue(data_in,',',1));
+		}
+
+		else if(data_in.startsWith("TRP"))
+		{
+			imu.pitch_angle_offset = atof(getValue(data_in,',',1));
+		}
+
+
+	}
+	// telemetry_transmit_counter++;
+	// switch(telemetry_transmit_counter)
+	// {
+	// 	case 1:
+	// 	break;
+
+	// 	case 10: // Battery data
+		
+	// 	telemetry.Transmit(String("BAT,") + battery_voltage + "\n");
+	// 	break;
+
+	// 	case 20:
+	// 	telemetry.Transmit(String("ENG,") + engineStart + "\n");
+	// 	break;
+
+	// 	case 30:
+	// 	telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
+	// 	break;
+
+	// 	case 40:
+	// 	telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
+	// 	telemetry_transmit_counter = 0;
+	// 	telemetry.flush();
+	// 	break;
+	// }
+
+
+
 	//Calculate delta time;
 	deltaTime = (micros() - prev_deltaTime);
 	prev_deltaTime = micros();
@@ -123,15 +188,18 @@ void loop()
 		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
 		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ());
 
-		pid_alt.Compute(imu.Get_pressure() - pressure_setPoint);
-
-		if(channel[THROTTLE] > 1150 || (prev_throttle - throttle > 100))
+		// if(channel[THROTTLE] > 1150 || (prev_throttle - throttle > 100))
+		// {
+		// 	throttle = MIN_THROTTLE_VALUE + throttle_bias + pid_alt.output;
+		// }
+		// else throttle = MIN_THROTTLE_VALUE + throttle_bias - 100; 
+		if(alt_hold)
 		{
-			throttle = MIN_THROTTLE_VALUE + throttle_bias + pid_alt.output;
+			pid_alt.Compute(imu.Get_pressure() - pressure_setPoint);
+			throttle = THROTTLE_MIN_LIMIT + throttle_bias + pid_alt.output;
 		}
-		else throttle = MIN_THROTTLE_VALUE + throttle_bias - 100; 
-
-		// throttle = channel[THROTTLE];
+		else throttle = channel[THROTTLE];
+		
 
 		throttle = constrain(throttle,THROTTLE_MIN_LIMIT,THROTTLE_MAX_LIMIT);
 
@@ -173,10 +241,10 @@ void loop()
 		esc_4 = ESC_OFF;
 	}
 
-	Write_4Engines();
-
 	while(micros() - loop_timer < LOOP_TIME); //should sync loop speed with esc's, not sure if neccecery
 	loop_timer = micros();
+
+	Write_4Engines();
 
 	//Serial Debuging
 	// Serial.println(imu.Get_pressure());
@@ -184,8 +252,9 @@ void loop()
 	// Serial.println(imu.Get_Altitude());
 	// Serial.println(battery_voltage);
 	// Serial.println(imu.Get_Velocity());
-	Serial.println(pid_alt.output);
+	// Serial.println(pid_alt.output);
 	// Serial.println(throttle);
+	// Serial.println(pid_yaw.output);
 	// Serial.println(imu.Get_Heading());
 	// Serial.print(",");
 	// Serial.print(channel[PITCH]);
@@ -249,19 +318,8 @@ void RC_toValue()
 	if(channel[YAW] > AUX1_VALUE && !aux1) {
 		aux1 = 1;
 		if(!prev_aux1){ //single Click command
-			// GPIOC_BASE->BRR = (0b1 << 13);
-			// mag_hold = !mag_hold;
-			// if(mag_hold) mag_hold_val = imu.Get_Heading();
-			engineStart = false;
-			alt_hold = !alt_hold;
-			if(alt_hold){
-				// Serial1.print("$ah,1,#"); Telemetry (Suspended)
-				// pressure_setPoint = imu.Get_pressure();
-			}
-			else
-			{
-				// Serial1.print("$ah,0,#"); Telemetry (Suspended)
-			}
+			mag_hold = !mag_hold;
+			if(mag_hold) mag_hold_val = imu.Get_Heading();
 		}
 		prev_aux1 = aux1;
 	}
@@ -269,6 +327,9 @@ void RC_toValue()
 
 	setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
 	pressure_setPoint = imu.Pressure_from_altitude(imu.Get_refPerssure(),setPoint_altitude);
+
+	// Serial.print(imu.Get_pressure(),imu.Pressure_from_altitude(imu.Get_refPerssure,0))
+	// Serial.println(imu.Get_altitude());
 }
 
 void Write_4Engines()
@@ -295,6 +356,7 @@ bool StartEngines()
 		pid_mag.Reset();
 		pid_alt.Reset();
 		imu.reset();
+		alt_hold = false;
 	}
 
 	//Start engines.
@@ -367,7 +429,7 @@ void handler_channel_4(void) {
   }
 }
 
-String getValue(String data, char separator, int index){
+char* getValue(String data, char separator, uint8_t index){
     int found = 0;
     int strIndex[] = { 0, -1 };
     int maxIndex = data.length() - 1;
@@ -379,7 +441,20 @@ String getValue(String data, char separator, int index){
             strIndex[1] = (i == maxIndex) ? i+1 : i;
         }
     }
-    return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
+    if(found > index)
+    {
+    	String res = data.substring(strIndex[0], strIndex[1]);
+    	char value[sizeof(res)];
+    	for(uint16_t i = 0; i < sizeof(res); i++)
+    	{
+    		value[i] = res[i];
+    	}
+
+    	return value;
+    }
+
+    else return "";
+    // return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
 //Telemetry (Suspended)

@@ -12,8 +12,6 @@ float IMU::Get_Heading() 		{ return heading; }
 float IMU::Get_refPerssure() 	{ return ref_pressure; }
 float IMU::Get_altitude()		{ return reletive_altitude; }
 
-float IMU::Pressure_from_altitude(float ref_pr,float alt) 
-{ return pow(pow(ref_pr,1.0f/5.255f) - (alt*pow(ref_pr,1.0f/5.255f)) / 44330.0f,5.255f); }
 
 void IMU::setAL_Mul(float mul) { al_mul = mul; }
 
@@ -139,8 +137,8 @@ void IMU::Compute()
 		gyro_angle[1]  -= gyro_angle[0] * sin(gyro_raw[2] * gyro_time_radians);
 
 		//Trim & currections for accelerometer
-		acc_angle[0] -= 0.43;
-		acc_angle[1] += 1.5;
+		acc_angle[0] -= roll_angle_offset; 		//Roll
+		acc_angle[1] -= pitch_angle_offset; 	//Pitch
 
 		gyro_angle[0] = gyro_angle[0] * 0.9994 + acc_angle[0] * 0.0006;
 		gyro_angle[1] = gyro_angle[1] * 0.9994 + invert(acc_angle[1]) * 0.0006;
@@ -299,3 +297,6 @@ void IMU::Calculate_pressure(uint8_t OSR)
 		break;
 	}
 }
+
+float IMU::Pressure_from_altitude(float ref_pr,float alt) 
+{ return pow(pow(ref_pr,1.0f/5.255f) - (alt*pow(ref_pr,1.0f/5.255f)) / 44330.0f,5.255f); }

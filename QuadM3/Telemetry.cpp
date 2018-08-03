@@ -5,100 +5,56 @@ Telemetry::Telemetry()
   //Init variables
 }
 
-void Telemetry::Init(uint32 baudrate)
+void Telemetry::Init(uint16_t baud)
 {
-  Serial1.begin(baudrate);
+  pinMode(PC14,OUTPUT);
+  digitalWrite(AT_PIN,1);
+  Serial1.begin(baud);
+  baudrate = baud;
 }
 
-int8_t Telemetry::GetData(uint8_t data_available)
+bool Telemetry::Receive()
 {
-  //this is getting buggy at long buffers
-  // int8_t how_many = Serial1.available();
-  // char buffer[100];
-  // int8_t c = Serial1.readBytes(buffer,50);
-  // // Serial.println(String("da:") + data_available + "hm:"+how_many);
-  // serial_input = buffer;
+  //receiving methods:
+  /*
+  1. fixed packet size - buffer will fill into a fixed size so we know when packed is fully received.
+  2. packet will contain size info - first value of packet will be packet size & if size info is the same avaiable read it <---
+  3. when data is available wait 3 seconds  then read it should be full
+  4. read start char and end char to determine packet e2e
+  5. if data available size is the same as prev loop probaply packet is full
+  */
 
-  serial_input = "";
-  while(Serial1.available()){
-    char c = Serial1.read();
-    serial_input +=c;
-    if(serial_input.length() > MAX_SERIAL_BUFFER)
+  packet_size = Serial1.available();
+  if(packet_size > 0)
+  {
+    if(packet_size == prev_packet_size) checksum++;
+    else checksum = 0;
+
+    if(checksum >= 10) //TODO: change 10 after testing with long distance to a pre defined number
     {
-      break;
-      return -1;
+      //Packet ready
+      memset(in_buffer, 0, sizeof(in_buffer)); //Clear the buffer
+      Serial1.readBytes(in_buffer,packet_size);
+      // Transmit(in_buffer);
+      return 1;
     }
-    delay(5); //TODO: Check how this delay affect long distast transmission
-  }
-  // Serial.println(serial_input);
-  String tlm_command = serial_input.substring(0,4);
+    prev_packet_size = packet_size;
+    return 0;
+  } else return 0;
+}
 
-  if(tlm_command == "$als")
+void Telemetry::Transmit(String data)
+{
+  char out_data[sizeof(data)];
+  for(uint8_t i = 0; i < sizeof(data);i++)
   {
-    float value = getValue(serial_input,',',1).toFloat();
-    autolevel_stregth = value;
-    return 2;
+    out_data[i] = data[i];
   }
-
-  else if(tlm_command == "$csn")
-  {
-    // set controller sensativity
-    float value = getValue(serial_input,',',1).toFloat();
-    tlm_controller_sensativity = value;
-    return 3;
-  }
-  else if(tlm_command == "$tfd")
-  {
-    // transmit flight data
-    int8_t value = getValue(serial_input,',',1).toInt();
-    tlm_transmit_flight_data = value;
-    return 4;
-  }
-
-  else if(tlm_command == "$cgy")
-  {
-    // calibrate gyro
-    return 5;
-  }
-
-  else if(tlm_command == "$gpg")
-  {
-    // send pid gains.
-    return 6;
-  }
-
-  else if(tlm_command == "$pid")
-  {
-    //set new pid values
-    pid_setting = getValue(serial_input,',',1).toInt();
-    _p = getValue(serial_input,',',2).toFloat();
-    _i = getValue(serial_input,',',3).toFloat();
-    _d = getValue(serial_input,',',4).toFloat();
-    return 7;
-  }
-
-  else if(tlm_command == "$rpv")
-  {
-    return 8;
-  }
-
-  else if(tlm_command == "$trs")
-  {
-    transmission_speed = getValue(serial_input,',',1).toInt();
-    return -1;
-  }
-
-  else if(tlm_command == "$trb")
-  {
-    //throttle bias
-    tlm_throttle_bias = getValue(serial_input,',',1).toInt();
-    return 9;
-  }
-
-  else if (tlm_command == "test")
-  {
-    Transmit("test");
-  }
+  Serial1.write(out_data);
+}
+void Telemetry::flush()
+{
+  Serial1.flush();
 }
 
 String Telemetry::getValue(String data, char separator, int index)
@@ -115,9 +71,4 @@ String Telemetry::getValue(String data, char separator, int index)
         }
     }
     return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
-}
-
-void Telemetry::Transmit(String buffer)
-{
-  Serial1.print(buffer + '\n');
 }
