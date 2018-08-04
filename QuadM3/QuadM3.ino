@@ -47,6 +47,7 @@ bool battery_connected = false;
 void setup() {
 	Serial.begin(9600);
 	telemetry.Init(1200);
+
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -177,10 +178,11 @@ void loop()
 
 	Telemetry_TR(telemetry_mode);
 
+
 	//Serial Debuging
 	// Serial.println(imu.Get_pressure());
 	// Serial.println(imu.Get_GyroX_Angle());
-	// Serial.println(imu.Get_Altitude());
+	Serial.println(imu.Get_Altitude());
 	// Serial.println(battery_voltage);
 	// Serial.println(imu.Get_Velocity());
 	// Serial.println(pid_alt.output);
@@ -200,11 +202,11 @@ void loop()
 	// Serial.println(setPoint_yaw);
 	// Serial.print(esc_1);
 	// Serial.print(",");
+	// Serial.print(esc_4);
+	// Serial.print(",");
 	// Serial.print(esc_2);
 	// Serial.print(",");
-	// Serial.print(esc_3);
-	// Serial.print(",");
-	// Serial.println(esc_4);
+	// Serial.println(esc_3);
 }
 
 void RC_toValue()
@@ -501,6 +503,7 @@ char* getValue(String data, char separator, uint16_t index){
     int16_t maxIndex = data.length() - 1; 				//This is a signed int in case data length is 0
 
     for (uint16_t i = 0; i <= maxIndex && found <= index; i++) {
+
         if (data.charAt(i) == separator || i == maxIndex) {
             found++;
             strIndex[0] = strIndex[1] + 1;

@@ -16,6 +16,7 @@ float IMU::Get_altitude()		{ return reletive_altitude; }
 void IMU::setAL_Mul(float mul) { al_mul = mul; }
 
 float IMU::Get_offset(uint8_t xy) { return gyro_offset[xy]; }
+
 int16_t IMU::Get_AccX(){return acc_raw[0];}
 int16_t IMU::Get_AccY(){return acc_raw[1];}
 int16_t IMU::Get_AccZ(){return acc_raw[2];}
@@ -97,6 +98,7 @@ void IMU::read_HMC5883L()
 	mag_z |= TWire.read(); //Z lsb
 	mag_y = TWire.read()<<8; //Y msb
 	mag_y |= TWire.read(); //Y lsb
+
 }
 
 void IMU::readMPU6050()
@@ -112,6 +114,8 @@ void IMU::readMPU6050()
 	gyro_raw[0] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
 	gyro_raw[1] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
 	gyro_raw[2] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
+
+
 }
 
 void IMU::Compute()
@@ -161,6 +165,7 @@ void IMU::Compute()
 	else if(mag_angle > 2*PI) mag_angle -= 2*PI;
 	heading = mag_angle * 180/PI;
 #endif
+
 
 }
 
@@ -301,6 +306,7 @@ void IMU::Calculate_pressure(uint8_t OSR)
 
 		if(calibrated) reletive_altitude = 44330.0f * (1.0f - pow(LPF_pressure / ref_pressure, 1.0f/5.255f));
 		break;
+
 
 		case 4:
 		pressure_read_counter = 0;

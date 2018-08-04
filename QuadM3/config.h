@@ -9,7 +9,8 @@
 #define GYRO_SCALE          	(65.5)
 #define ACC_SCALE           	(170.1388F)
 #define ACC_REST            	(3600)
-#define CALIBRATION_REP 		(500)
+#define CALIBRATION_REP 		  (500)
+
 
 //MS5611
 #define MS5611_MAX_OSR			(0x08)
