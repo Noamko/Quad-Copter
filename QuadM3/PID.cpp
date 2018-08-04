@@ -7,7 +7,6 @@ PID::PID()
 
 }
 
-
 //Basic Gyro based PID
 void PID::Compute(float error)
 {
@@ -16,20 +15,13 @@ void PID::Compute(float error)
 
 	i_Term += error;
 	i_Term = constrain(i_Term, -MAX_I, MAX_I);
+	i_Term *= Ki;
 
 	d_Term = error - prev_error;
 	d_Term *= Kd;
 	prev_error = error;
 
-	output = p_Term + i_Term*Ki + d_Term;
-}
-
-void PID::Compute_AH(float error,float vel)
-{
-	p_Term = error *Kp;
-	i_Term += constrain(error,-150,150);
-	d_Term = vel * Kd;
-	output = p_Term + i_Term*Ki  + d_Term;
+	output = p_Term + i_Term + d_Term;
 }
 
 void PID::Set_gains(float k_p,float k_i,float k_d)

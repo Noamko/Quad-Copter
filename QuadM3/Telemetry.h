@@ -6,21 +6,18 @@
 
 class Telemetry {
 private:
-  String getValue(String data, char separator, int index);
-  String serial_input;
+  uint16_t baudrate;
+  uint16_t packet_size, prev_packet_size;
+  uint8_t checksum = 0;
+  
+
 
 public:
   Telemetry ();
-  void Init(uint32 baudrate);
-  void Transmit(String buffer);
-  float tlm_controller_sensativity;
-  float autolevel_stregth;
-  float _p;
-  float _d;
-  float _i;
-  int8_t GetData(uint8_t data_available);
-  uint8_t transmission_speed = 50;
-  uint8_t tlm_transmit_flight_data;
-  uint8_t pid_setting;
+  void Init(uint16_t baud);
+  bool Receive();
+  void Transmit(String data);
+  char in_buffer[100];
+  void flush();
 };
 #endif
