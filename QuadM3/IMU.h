@@ -63,20 +63,20 @@ private:
 	float heading;
 	int16_t mag_x,mag_y,mag_z;
 
-	//mpu6050 variables
+	//MPU6050 variables
 	bool calibrated = false;
 	bool auto_level = true;
 	float gyro_data[3];
 	float acc_angle[2];
 	float gyro_angle[2];
-	double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
-	double gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
 	float gyro_offset[3];
 	float z_velocity;
+	double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
+	double gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
 	int16_t gyro_raw[3];
 	int16_t acc_raw[3];
 	int16_t mpu6050_temperature;
-	int32_t accz_offset;
+	int16_t accz_offset;
 	int16_t acc_z;
 	int16_t prev_acc;
 
@@ -85,6 +85,6 @@ private:
 	 float pitch_level_ajust;
 	 float al_mul = 3;
 	 uint32_t prev_dt;
-	 uint16_t dt;
+	 uint32_t dt;
 };
 #endif

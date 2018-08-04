@@ -12,7 +12,7 @@
 #define CALIBRATION_REP 		(500)
 
 //MS5611
-// #define OSR                 	(0x08)
+#define MS5611_MAX_OSR			(0x08)
 #define MS5611_ADDRESS      	(0x77)
 
 //HMC5883L
@@ -30,7 +30,7 @@
 #define MAX_I               	(200)
 
 //Global
-#define ESC_MAX_LIMIT       	(2000)
+#define ESC_MAX_LIMIT       	(1800)
 #define ESC_MIN_LIMIT       	(1096)
 #define ESC_OFF             	(1010)
 #define THROTTLE_MAX_LIMIT 		(1800)

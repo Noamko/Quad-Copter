@@ -120,14 +120,14 @@ void IMU::Compute()
 	prev_dt = micros();
 	//Gyro
 	readMPU6050();
-	for(int axis = 0; axis < 3; axis++){
+	for(uint8_t axis = 0; axis < 3; axis++){
 		//apply gyro offsets.
 		gyro_raw[axis] -= gyro_offset[axis];
 		//lowpass filter
 		gyro_data[axis] = (gyro_data[axis] * 0.85f) +((gyro_raw[axis]/GYRO_SCALE) * 0.15f);
 	}
 	if(auto_level){
-		for(int i = 0; i < 2; i++)
+		for(uint8_t i = 0; i < 2; i++)
 		{
 			gyro_angle[i] += gyro_raw[i] * gyro_time;
 			acc_angle[i] = atan2(acc_raw[i] ,acc_raw[2]) * RAD_TO_DEG;
@@ -151,7 +151,7 @@ void IMU::Compute()
 		pitch_level_ajust = 0.0;
 	}
 
-	Calculate_pressure(0x08);
+	Calculate_pressure(MS5611_MAX_OSR);
 
 
 #ifdef HMC5883L
@@ -170,10 +170,17 @@ void IMU::Calibrate()
 	gyro_offset[1] = 0;
 	gyro_offset[2] = 0;
 	accz_offset = 0;
-	for(int i = 0; i < CALIBRATION_REP; i++)
+	for(uint8_t i = 0; i < 200; i++)
+    {
+    	Calculate_pressure(MS5611_MAX_OSR);
+    	LPF_pressure = avarage_pressure;
+    	delay(3);
+    	if((i&15) == 0) digitalWrite(IND_LED,!digitalRead(IND_LED));
+    }
+	for(uint16_t i = 0; i < CALIBRATION_REP; i++)
 	{
 		readMPU6050();
-		for(int axis = 0; axis < 3; axis++)
+		for(uint8_t axis = 0; axis < 3; axis++)
 		{
 			gyro_offset[axis] += gyro_raw[axis];
 		}
@@ -183,17 +190,17 @@ void IMU::Calibrate()
 		TIMER4_BASE->CCR2 = 1000;
 		TIMER4_BASE->CCR3 = 1000;
 		TIMER4_BASE->CCR4 = 1000;
-		Calculate_pressure(0x08);
-		if((i&15) == 0) digitalWrite(PC13,!digitalRead(PC13));
+		Calculate_pressure(MS5611_MAX_OSR);
+		if((i&15) == 0) digitalWrite(IND_LED,!digitalRead(IND_LED));
 
 	}
-	for(int axis = 0; axis < 3; axis++){
+	for(uint8_t axis = 0; axis < 3; axis++){
 		gyro_offset[axis] /= CALIBRATION_REP;
 	}
-	ref_pressure = LPF_pressure;
+	ref_pressure = avarage_pressure;
 	accz_offset /= CALIBRATION_REP;
 	if(gyro_offset[0] != 0) calibrated = true;
-	digitalWrite(PC13,1);
+	digitalWrite(IND_LED,1);
 }
 
 void IMU::reset()
@@ -279,10 +286,13 @@ void IMU::Calculate_pressure(uint8_t OSR)
 		avarage_pressure_sample[avarage_pressure_index] = actual_pressure;
 		pressure_avarage_total += avarage_pressure_sample[avarage_pressure_index];
 		avarage_pressure_index++;
+
 		if(avarage_pressure_index == 20) avarage_pressure_index = 0;
 		avarage_pressure = pressure_avarage_total / 20;
 		if(millis() < 5000) avarage_pressure = LPF_pressure;
+
 		LPF_pressure = LPF_pressure * 0.985f + avarage_pressure * 0.015f;
+
 		pressure_diff = LPF_pressure - avarage_pressure;
 		pressure_diff = constrain(pressure_diff,-8,8);
 		if(pressure_diff > 1 || pressure_diff < -1) LPF_pressure -= pressure_diff /6.0f;

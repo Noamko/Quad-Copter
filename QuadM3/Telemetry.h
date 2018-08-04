@@ -6,7 +6,6 @@
 
 class Telemetry {
 private:
-  String getValue(String data, char separator, int index);
   uint16_t baudrate;
   uint16_t packet_size, prev_packet_size;
   uint8_t checksum = 0;
