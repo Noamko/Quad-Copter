@@ -15,6 +15,10 @@ float controller_sensativity = 3.0f;
 PID pid_roll, pid_pitch, pid_yaw;
 PID pid_mag;
 PID pid_alt;
+int16_t setPoint_roll,setPoint_pitch,setPoint_yaw;
+float setPoint_altitude;
+float pressure_setPoint;
+float setPoint_mag;
 
 //Telemetry variables
 Telemetry telemetry;
@@ -23,14 +27,10 @@ uint8_t telemetry_mode = 1;
 
 //Global variables
 int16_t battery_voltage;
-int16_t setPoint_roll,setPoint_pitch,setPoint_yaw;
-float setPoint_altitude;
-float pressure_setPoint;
-float setPoint_mag;
 uint16_t esc_1, esc_2, esc_3, esc_4;
 uint16_t throttle, prev_throttle,throttle_base;
 uint16_t deltaTime;
-uint16_t throttle_bias = 330;
+uint16_t throttle_bias = 400;
 
 uint32  loop_timer;
 uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
@@ -40,6 +40,7 @@ float heading_setPoint;
 float voltage_compensation;
 
 bool mag_hold = false;
+bool mag_correction = true;
 bool alt_hold = false;
 bool engineStart = false;
 bool battery_connected = false;
@@ -94,12 +95,12 @@ void setup() {
 	imu.Init();
 	delay(250);
 
+	//PID still need some tweak
 	pid_roll.Set_gains(1.6, 0.03, 6.5);
 	pid_pitch.Set_gains(1.6, 0.03, 6.5);
 	pid_yaw.Set_gains(10, 0.05, 10);
 	pid_mag.Set_gains(1.2,0.01,2.0);
 	pid_alt.Set_gains(3.0,0.01,3.0);
-
 
 	heading_setPoint = imu.Get_Heading();
 
@@ -125,7 +126,6 @@ void loop()
 		pid_roll.Compute(setPoint_roll - imu.Get_GyroX());
 		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
 		
-
 		if(mag_hold)
 		{
 			pid_mag.Compute(heading_setPoint - imu.Get_Heading());
@@ -256,19 +256,14 @@ void RC_toValue()
 	else if(setPoint_yaw == 0 && !mag_hold)
 	{
 		heading_setPoint = imu.Get_Heading();
-		mag_hold = true;
+		if(mag_correction) mag_hold = true;
 	}
 
 	if(channel[YAW] > AUX1_VALUE && !aux1) {
 		aux1 = 1;
 		if(!prev_aux1){ //single Click command
-			// mag_hold = !mag_hold;
-			// if(mag_hold) mag_hold_val = imu.Get_Heading();
 			alt_hold = !alt_hold;
-			if(alt_hold)
-			{
-				pressure_setPoint = imu.Get_pressure();
-			}
+			if(alt_hold) pressure_setPoint = imu.Get_pressure();
 		}
 		prev_aux1 = aux1;
 	}
@@ -314,7 +309,7 @@ bool StartEngines()
 	&& channel[THROTTLE] > 900
 	&& channel[YAW] <= channel_4_MIN_VALUE +5
 	&& channel[YAW] < AUX2_VALUE)
-	 {
+	{
 		engineStart = true;
 	}
 
@@ -324,7 +319,7 @@ bool StartEngines()
 	&& channel[YAW] >= channel_4_MAX_VALUE - 5
 	&& channel[YAW] < AUX2_VALUE
 	&& !engineStart)
-	 {
+	{
 		imu.Calibrate();
 	}
 	return engineStart;
