@@ -8,7 +8,7 @@ Learned a lot from http://www.brokking.net/
 
 this project works with a gui telemetry that I made using .NET-WPF (I will share a download link in the near future)..
 
-##Hardware
+## Hardware
   
 * STM32F103C8T6 dev board
 * MPU6050 gyro
