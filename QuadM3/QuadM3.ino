@@ -36,7 +36,7 @@ uint32  loop_timer;
 uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
 uint32  prev_deltaTime;
 
-float mag_hold_val;
+float heading_setPoint;
 float voltage_compensation;
 
 bool mag_hold = false;
@@ -96,9 +96,12 @@ void setup() {
 
 	pid_roll.Set_gains(1.6, 0.03, 6.5);
 	pid_pitch.Set_gains(1.6, 0.03, 6.5);
-	pid_yaw.Set_gains(12, 0.1, 10);
-	pid_mag.Set_gains(1.2,0.01,3.0);
-	pid_alt.Set_gains(3.0,0.02,4.0);
+	pid_yaw.Set_gains(10, 0.05, 10);
+	pid_mag.Set_gains(1.2,0.01,2.0);
+	pid_alt.Set_gains(3.0,0.01,3.0);
+
+
+	heading_setPoint = imu.Get_Heading();
 
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
@@ -119,10 +122,15 @@ void loop()
 	{
 		RC_toValue(); //convert channles values to Setpoints.
 
-		// if(mag_hold) pid_mag.Compute(mag_hold_val - imu.Get_Heading());
-
 		pid_roll.Compute(setPoint_roll - imu.Get_GyroX());
 		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
+		
+
+		if(mag_hold)
+		{
+			pid_mag.Compute(heading_setPoint - imu.Get_Heading());
+			setPoint_yaw = constrain(pid_mag.output,-50,50);
+		}
 		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ());
 
 		if(alt_hold)
@@ -160,7 +168,6 @@ void loop()
 		esc_2 = constrain(esc_2, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
 		esc_3 = constrain(esc_3, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
 		esc_4 = constrain(esc_4, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
-
 	}
 
 	else //Turn engines off 
@@ -182,7 +189,6 @@ void loop()
 	//Serial Debuging
 	// Serial.println(imu.Get_pressure());
 	// Serial.println(imu.Get_GyroX_Angle());
-	Serial.println(imu.Get_Altitude());
 	// Serial.println(battery_voltage);
 	// Serial.println(imu.Get_Velocity());
 	// Serial.println(pid_alt.output);
@@ -236,16 +242,21 @@ void RC_toValue()
 	//Yaw
 	setPoint_yaw = 0;
 
-	//TODO: add mag correction to yaw
-	if(mag_hold) setPoint_yaw = constrain(pid_mag.output,-50,50);
-	else{
-		if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
-			setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
-		}
-		else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
-			setPoint_yaw = channel[YAW] - CH1_CENTERED - CONTROLLER_DEADBAND;
-		}
+	if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
+		setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
 		setPoint_yaw /= CONTROLLER_SENSATIVITY;
+		mag_hold = false;
+	}
+	else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
+		setPoint_yaw = channel[YAW] - CH1_CENTERED - CONTROLLER_DEADBAND;
+		setPoint_yaw /= CONTROLLER_SENSATIVITY;
+		mag_hold = false;
+	}
+
+	else if(setPoint_yaw == 0 && !mag_hold)
+	{
+		heading_setPoint = imu.Get_Heading();
+		mag_hold = true;
 	}
 
 	if(channel[YAW] > AUX1_VALUE && !aux1) {
