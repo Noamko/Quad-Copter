@@ -16,4 +16,4 @@ This project works with a gui telemetry that I made using .NET-WPF (I will share
 * MS5611 Barometer
 * HMC5883L Compass
 * RC Receiver
-* HC-12 long-rage telemetry transmitter
+* HC-12 long-rage telemetry transmitter/Receiver
