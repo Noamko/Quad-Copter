@@ -6,8 +6,9 @@
 //IMU variables
 IMU imu;
 //RC variables
-int32_t channel[4];
-int32_t channel_start[4];
+int32_t channel[8];
+uint8_t channel_select_counter;
+int32_t measured_time, measured_time_start;
 uint8_t aux1,prev_aux1;
 float controller_sensativity = 3.0f;
 
@@ -33,7 +34,7 @@ uint16_t deltaTime;
 uint16_t throttle_bias = 400;
 
 uint32  loop_timer;
-uint32  timer_channel_1, timer_channel_2, timer_channel_3, timer_channel_4, esc_timer, esc_loop_timer;
+uint32  esc_timer, esc_loop_timer;
 uint32  prev_deltaTime;
 
 float heading_setPoint;
@@ -48,7 +49,6 @@ bool battery_connected = false;
 void setup() {
 	Serial.begin(9600);
 	telemetry.Init(1200);
-
 	delay(250);
 
 	pinMode(IND_LED,OUTPUT);
@@ -58,40 +58,8 @@ void setup() {
 	pinMode(PB8, PWM);
 	pinMode(PB9, PWM);
 
-	//Initilize Timers 3 & 4
-	TIMER4_BASE->CR1 = TIMER_CR1_CEN | TIMER_CR1_ARPE;  //Enable Timer 4
-	TIMER4_BASE->CR2 = 0;
-	TIMER4_BASE->SMCR = 0;
-	TIMER4_BASE->DIER = 0;
-	TIMER4_BASE->EGR = 0;
-	TIMER4_BASE->CCMR1 = (0b110 << 12) | (0b110 << 4) | TIMER_CCMR1_OC1PE;  // Set channel 1 & 2 on PWM1 mode
-	TIMER4_BASE->CCMR2 = (0b110 << 12) | (0b110 << 4) | TIMER_CCMR1_OC1PE;    // Set channel 3 & 4 on PWM1 Mode
-	TIMER4_BASE->CCER = TIMER_CCER_CC1E | TIMER_CCER_CC2E | TIMER_CCER_CC3E | TIMER_CCER_CC4E; //Enable Channels 1,2,3,4
-	TIMER4_BASE->PSC = 71;  //Set prescaler to 71 (72hz)
-	TIMER4_BASE->ARR = 5000; //set Counter to auto Reload at value of 5000
-	TIMER4_BASE->DCR = 0;
-
-	//Pwm values
-	TIMER4_BASE->CCR1 = 1000;
-	TIMER4_BASE->CCR2 = 1000;
-	TIMER4_BASE->CCR3 = 1000;
-	TIMER4_BASE->CCR4 = 1000;
-
-	Timer3.attachCompare1Interrupt(handler_channel_1);
-	Timer3.attachCompare2Interrupt(handler_channel_2);
-	Timer3.attachCompare3Interrupt(handler_channel_3);
-	Timer3.attachCompare4Interrupt(handler_channel_4);
-	TIMER3_BASE->CR1 = TIMER_CR1_CEN;
-	TIMER3_BASE->CR2 = 0;
-	TIMER3_BASE->SMCR = 0;
-	TIMER3_BASE->DIER = TIMER_DIER_CC1IE | TIMER_DIER_CC2IE | TIMER_DIER_CC3IE | TIMER_DIER_CC4IE;
-	TIMER3_BASE->EGR = 0;
-	TIMER3_BASE->CCMR1 = 0b100000001; //Register is set like this due to a bug in the define table (30-09-2017)
-	TIMER3_BASE->CCMR2 = 0b100000001; //Register is set like this due to a bug in the define table (30-09-2017)
-	TIMER3_BASE->CCER = TIMER_CCER_CC1E | TIMER_CCER_CC2E | TIMER_CCER_CC3E | TIMER_CCER_CC4E;
-	TIMER3_BASE->PSC = 71;
-	TIMER3_BASE->ARR = 0xFFFF;
-	TIMER3_BASE->DCR = 0;
+	Init_Timers();
+	delay(100);
 	imu.Init();
 	delay(250);
 
@@ -196,11 +164,21 @@ void loop()
 	// Serial.println(pid_yaw.output);
 	// Serial.println(imu.Get_Heading());
 	// Serial.print(",");
-	// Serial.print(channel[PITCH]);
-	// Serial.print(", ");
-	// Serial.print(channel[THROTTLE]);
+	// Serial.print(channel[0]);
 	// Serial.print(",");
-	// Serial.println(channel[YAW]);
+	// Serial.print(channel[1]);
+	// Serial.print(",");
+	// Serial.print(channel[2]);
+	// Serial.print(",");
+	// Serial.print(channel[3]);
+	// Serial.print(",");
+	// Serial.print(channel[4]);
+	// Serial.print(",");
+	// Serial.print(channel[5]);
+	// Serial.print(",");
+	// Serial.print(channel[6]);
+	// Serial.print(",");
+	// Serial.println(channel[7]);
 	// Serial.print(setPoint_roll);
 	// Serial.print(",");
 	// Serial.print(setPoint_pitch);
@@ -242,12 +220,12 @@ void RC_toValue()
 	//Yaw
 	setPoint_yaw = 0;
 
-	if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
+	if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND ){
 		setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
 		setPoint_yaw /= CONTROLLER_SENSATIVITY;
 		mag_hold = false;
 	}
-	else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND && channel[YAW] < AUX2_VALUE){
+	else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND){
 		setPoint_yaw = channel[YAW] - CH1_CENTERED - CONTROLLER_DEADBAND;
 		setPoint_yaw /= CONTROLLER_SENSATIVITY;
 		mag_hold = false;
@@ -258,22 +236,6 @@ void RC_toValue()
 		heading_setPoint = imu.Get_Heading();
 		if(mag_correction) mag_hold = true;
 	}
-
-	if(channel[YAW] > AUX1_VALUE && !aux1) {
-		aux1 = 1;
-		if(!prev_aux1){ //single Click command
-			alt_hold = !alt_hold;
-			if(alt_hold) pressure_setPoint = imu.Get_pressure();
-		}
-		prev_aux1 = aux1;
-	}
-	else if(channel[YAW] < AUX1_VALUE && aux1) prev_aux1 = 0, aux1 = 0;
-
-	// setPoint_altitude = map(channel[THROTTLE],1000,2000,0,10);
-	// pressure_setPoint = imu.Pressure_from_altitude(imu.Get_refPerssure(),setPoint_altitude);
-
-	// Serial.print(imu.Get_pressure(),imu.Pressure_from_altitude(imu.Get_refPerssure,0))
-	// Serial.println(imu.Get_altitude());
 }
 
 void Write_4Engines()
@@ -287,10 +249,9 @@ void Write_4Engines()
 bool StartEngines()
 {
 	if
-	(channel[THROTTLE] <= MIN_THROTTLE_VALUE + 5
+	(channel[THROTTLE] <= MIN_THROTTLE_VALUE + CONTROLLER_DEADBAND
 	&& channel[THROTTLE] > 900
-	&& channel[YAW] >= channel_4_MAX_VALUE - 10
-	&& channel[YAW] < AUX2_VALUE)
+	&& channel[YAW] >= channel_4_MAX_VALUE - CONTROLLER_DEADBAND)
 	{
 		//turn off engines and reset pid and imu angles
 		engineStart = false;
@@ -305,19 +266,17 @@ bool StartEngines()
 
 	//Start engines.
 	else if
-	(channel[THROTTLE] <= MIN_THROTTLE_VALUE +5
+	(channel[THROTTLE] <= MIN_THROTTLE_VALUE + CONTROLLER_DEADBAND
 	&& channel[THROTTLE] > 900
-	&& channel[YAW] <= channel_4_MIN_VALUE +5
-	&& channel[YAW] < AUX2_VALUE)
+	&& channel[YAW] <= channel_4_MIN_VALUE + CONTROLLER_DEADBAND)
 	{
 		engineStart = true;
 	}
 
 	//Calibrate.
 	else if
-	(channel[THROTTLE] >= MAX_THROTTLE_VALUE - 5
-	&& channel[YAW] >= channel_4_MAX_VALUE - 5
-	&& channel[YAW] < AUX2_VALUE
+	(channel[THROTTLE] >= MAX_THROTTLE_VALUE - CONTROLLER_DEADBAND
+	&& channel[YAW] >= channel_4_MAX_VALUE - CONTROLLER_DEADBAND
 	&& !engineStart)
 	{
 		imu.Calibrate();
@@ -325,52 +284,21 @@ bool StartEngines()
 	return engineStart;
 }
 
-void handler_channel_1(void) {
-  if (0b1 & GPIOA_BASE->IDR  >> 6) {
-    channel_start[ROLL] = TIMER3_BASE->CCR1;
-    TIMER3_BASE->CCER |= TIMER_CCER_CC1P;
-  }
-  else {
-    channel[ROLL] = TIMER3_BASE->CCR1 - channel_start[ROLL];
-    if (channel[ROLL] < 0)channel[ROLL] += 0xFFFF;
-    TIMER3_BASE->CCER &= ~TIMER_CCER_CC1P;
-  }
-}
+void channel_handler(void) {
+	measured_time = TIMER3_BASE->CCR1 - measured_time_start;
+	if (measured_time < 0)measured_time += 0xFFFF;
+	measured_time_start = TIMER3_BASE->CCR1;
+	if (measured_time > 4000)channel_select_counter = 0;
+	else channel_select_counter++;
 
-void handler_channel_2(void) {
-  if (0b1 & GPIOA_BASE->IDR >> 7) {
-    channel_start[PITCH] = TIMER3_BASE->CCR2;
-    TIMER3_BASE->CCER |= TIMER_CCER_CC2P;
-  }
-  else {
-    channel[PITCH] = TIMER3_BASE->CCR2 - channel_start[PITCH];
-    if (channel[PITCH] < 0)channel[PITCH] += 0xFFFF;
-    TIMER3_BASE->CCER &= ~TIMER_CCER_CC2P;
-  }
-}
-
-void handler_channel_3(void) {
-  if (0b1 & GPIOB_BASE->IDR >> 0) {
-    channel_start[THROTTLE] = TIMER3_BASE->CCR3;
-    TIMER3_BASE->CCER |= TIMER_CCER_CC3P;
-  }
-  else {
-    channel[THROTTLE] = TIMER3_BASE->CCR3 - channel_start[THROTTLE];
-    if (channel[THROTTLE] < 0)channel[THROTTLE] += 0xFFFF;
-    TIMER3_BASE->CCER &= ~TIMER_CCER_CC3P;
-  }
-}
-
-void handler_channel_4(void) {
-  if (0b1 & GPIOB_BASE->IDR >> 1) {
-    channel_start[YAW] = TIMER3_BASE->CCR4;
-    TIMER3_BASE->CCER |= TIMER_CCER_CC4P;
-  }
-  else {
-    channel[YAW] = TIMER3_BASE->CCR4 - channel_start[YAW];
-    if (channel[YAW] < 0)channel[YAW] += 0xFFFF;
-    TIMER3_BASE->CCER &= ~TIMER_CCER_CC4P;
-  }
+	if (channel_select_counter == 1) channel[0] = measured_time;
+	if (channel_select_counter == 2) channel[1] = measured_time;
+	if (channel_select_counter == 3) channel[2] = measured_time;
+	if (channel_select_counter == 4) channel[3] = measured_time;
+	if (channel_select_counter == 5) channel[4] = measured_time;
+	if (channel_select_counter == 6) channel[5] = measured_time;
+	if (channel_select_counter == 7) channel[6] = measured_time;
+	if (channel_select_counter == 8) channel[7] = measured_time;
 }
 
 void Telemetry_TR(uint8_t mode)
@@ -530,4 +458,40 @@ char* getValue(String data, char separator, uint16_t index){
     }
 
     else return "";
+}
+
+void Init_Timers()
+{
+	TIMER4_BASE->CR1 = TIMER_CR1_CEN | TIMER_CR1_ARPE;  //Enable Timer 4
+	TIMER4_BASE->CR2 = 0;
+	TIMER4_BASE->SMCR = 0;
+	TIMER4_BASE->DIER = 0;
+	TIMER4_BASE->EGR = 0;
+	TIMER4_BASE->CCMR1 = (0b110 << 12) | (0b110 << 4) | TIMER_CCMR1_OC1PE;  // Set channel 1 & 2 on PWM1 mode
+	TIMER4_BASE->CCMR2 = (0b110 << 12) | (0b110 << 4) | TIMER_CCMR1_OC1PE;    // Set channel 3 & 4 on PWM1 Mode
+	TIMER4_BASE->CCER = TIMER_CCER_CC1E | TIMER_CCER_CC2E | TIMER_CCER_CC3E | TIMER_CCER_CC4E; //Enable Channels 1,2,3,4
+	TIMER4_BASE->PSC = 71;  //Set prescaler to 71 (72hz)
+	TIMER4_BASE->ARR = 5000; //set Counter to auto Reload at value of 5000
+	TIMER4_BASE->DCR = 0;
+
+	//Pwm values
+	TIMER4_BASE->CCR1 = 1000;
+	TIMER4_BASE->CCR2 = 1000;
+	TIMER4_BASE->CCR3 = 1000;
+	TIMER4_BASE->CCR4 = 1000;
+
+	Timer3.attachCompare1Interrupt(channel_handler);
+  	TIMER3_BASE->CR1 = TIMER_CR1_CEN;
+  	TIMER3_BASE->CR2 = 0;
+  	TIMER3_BASE->SMCR = 0;
+  	TIMER3_BASE->DIER = TIMER_DIER_CC1IE;
+  	TIMER3_BASE->EGR = 0;
+  	TIMER3_BASE->CCMR1 = TIMER_CCMR1_CC1S_INPUT_TI1;
+  	TIMER3_BASE->CCMR2 = 0;
+  	TIMER3_BASE->CCER = TIMER_CCER_CC1E;
+  	//TIMER3_BASE->CCER |= TIMER_CCER_CC1P;    //Detect falling edge.
+  	TIMER3_BASE->CCER &= ~TIMER_CCER_CC1P; //Detect rising edge.
+  	TIMER3_BASE->PSC = 71;
+  	TIMER3_BASE->ARR = 0xFFFF;
+  	TIMER3_BASE->DCR = 0;
 }
