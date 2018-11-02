@@ -20,10 +20,10 @@
 #define HMC5883L_ADDRESS 		(0x1E)
 
 //RC
-#define CH1_CENTERED        	(1495)
-#define CH2_CENTERED        	(1495)
-#define CH4_CENTERED        	(1499)
-#define CONTROLLER_DEADBAND 	(12)
+#define CH1_CENTERED        	(1500)
+#define CH2_CENTERED        	(1500)
+#define CH4_CENTERED        	(1500)
+#define CONTROLLER_DEADBAND 	(10)
 #define CONTROLLER_SENSATIVITY 	(3.0F)
 
 //PID
@@ -36,13 +36,11 @@
 #define ESC_OFF             	(1010)
 #define THROTTLE_MAX_LIMIT 		(1800)
 #define THROTTLE_MIN_LIMIT  	(1100)
-#define MIN_THROTTLE_VALUE 		(1015)
-#define MAX_THROTTLE_VALUE 		(1993)
-#define AUX1_VALUE          	(9000) // this happans when top right button is clicked (NON STATIC!)
-#define AUX2_VALUE          	(5000) //Static this happans when light control is clicked (STATIC!)
-#define channel_4_MIN_VALUE 	(1196)
-#define channel_4_MAX_VALUE 	(1792)
-#define THROTTLE_HOVER_VALUE 	(1540)
+#define MIN_THROTTLE_VALUE 		(1000)
+#define MAX_THROTTLE_VALUE 		(2000)
+#define channel_4_MIN_VALUE 	(1000)
+#define channel_4_MAX_VALUE 	(2000)
+#define THROTTLE_HOVER_VALUE 	(1500)
 #define THROTTLE            	(2)
 #define ROLL                	(0)
 #define PITCH               	(1)
