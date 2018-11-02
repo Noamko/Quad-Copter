@@ -24,7 +24,7 @@ float setPoint_mag;
 //Telemetry variables
 Telemetry telemetry;
 uint16_t telemetry_transmit_counter;
-uint8_t telemetry_mode = 1;
+int8_t telemetry_mode = -1;
 
 //Global variables
 int16_t battery_voltage;
@@ -305,6 +305,9 @@ void Telemetry_TR(uint8_t mode)
 {
 	switch(mode)
 	{
+		case -1:
+		return;
+
 		case 0:
 		telemetry_transmit_counter++;
 		switch(telemetry_transmit_counter)
@@ -456,7 +459,6 @@ char* getValue(String data, char separator, uint16_t index){
 
     	return value;
     }
-
     else return "";
 }
 
