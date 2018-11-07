@@ -114,8 +114,6 @@ void IMU::readMPU6050()
 	gyro_raw[0] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
 	gyro_raw[1] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
 	gyro_raw[2] = TWire.read()<<8| TWire.read();//Read high and low part of the angular data.
-
-
 }
 
 void IMU::Compute()
@@ -124,6 +122,7 @@ void IMU::Compute()
 	prev_dt = micros();
 	//Gyro
 	readMPU6050();
+	// Calculate_Heading();
 	for(uint8_t axis = 0; axis < 3; axis++){
 		//apply gyro offsets.
 		gyro_raw[axis] -= gyro_offset[axis];
@@ -160,16 +159,23 @@ void IMU::Compute()
 
 #ifdef HMC5883L
 	read_HMC5883L();
+	if(compass_calibrated)
+	{
+		mag_y += compass_offset_y;                              //Add the y-offset to the raw value.
+    	mag_y *= compass_scale_y;                               //Scale the y-value so it matches the other axis.
+    	mag_z += compass_offset_z;                              //Add the z-offset to the raw value.
+    	mag_z *= compass_scale_z;                               //Scale the z-value so it matches the other axis.
+    	mag_x += compass_offset_x;
+	}
 	mag_angle = atan2(mag_y,mag_x);
 	if(mag_angle < 0) mag_angle += 2*PI;
 	else if(mag_angle > 2*PI) mag_angle -= 2*PI;
 	heading = mag_angle * 180/PI;
 #endif
 
-
 }
 
-void IMU::Calibrate()
+void IMU::Calibrate_gyro()
 {
 	gyro_offset[0] = 0;
 	gyro_offset[1] = 0;
@@ -180,7 +186,7 @@ void IMU::Calibrate()
     	Calculate_pressure(MS5611_MAX_OSR);
     	LPF_pressure = avarage_pressure;
     	delay(3);
-    	if((i&15) == 0) digitalWrite(IND_LED,!digitalRead(IND_LED));
+    	if((i&15) == 0) _LED(!digitalRead(IND_LED));//digitalWrite(IND_LED,!digitalRead(IND_LED));
     }
 	for(uint16_t i = 0; i < CALIBRATION_REP; i++)
 	{
@@ -190,7 +196,7 @@ void IMU::Calibrate()
 			gyro_offset[axis] += gyro_raw[axis];
 		}
 		accz_offset += acc_raw[2];
-		delay(3);
+		delay(4);
 		TIMER4_BASE->CCR1 = 1000;
 		TIMER4_BASE->CCR2 = 1000;
 		TIMER4_BASE->CCR3 = 1000;
@@ -205,14 +211,55 @@ void IMU::Calibrate()
 	ref_pressure = avarage_pressure;
 	accz_offset /= CALIBRATION_REP;
 	if(gyro_offset[0] != 0) calibrated = true;
-	digitalWrite(IND_LED,1);
+
+	_LED(LOW);
 }
+
+void IMU::Calibrate_acc()
+{
+	for(int i=0; i<CALIBRATION_REP; i++)
+	{
+		//TODO
+	}
+}
+
+void IMU::Calibrate_compass()
+{
+	for(int i=0; i< 5000; i++){
+		read_HMC5883L();
+		if(mag_x < compass_cal_values[0]) compass_cal_values[0] = mag_x;
+		if(mag_x > compass_cal_values[1]) compass_cal_values[1] = mag_x;
+		if(mag_y < compass_cal_values[2]) compass_cal_values[2] = mag_y;
+		if(mag_y > compass_cal_values[3]) compass_cal_values[3] = mag_y;
+		if(mag_z < compass_cal_values[4]) compass_cal_values[4] = mag_z;
+		if(mag_z > compass_cal_values[5]) compass_cal_values[5] = mag_z;
+		delay(4);
+		TIMER4_BASE->CCR1 = 1000;
+		TIMER4_BASE->CCR2 = 1000;
+		TIMER4_BASE->CCR3 = 1000;
+		TIMER4_BASE->CCR4 = 1000;
+		if((i&50) == 0) digitalWrite(IND_LED,!digitalRead(IND_LED));
+	}
+
+	//Calculate the alibration offset and scale values
+	compass_scale_y = ((float)compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[3] - compass_cal_values[2]);
+	compass_scale_z = ((float)compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[5] - compass_cal_values[4]);
+
+  	compass_offset_x = (compass_cal_values[1] - compass_cal_values[0]) / 2 - compass_cal_values[1];
+  	compass_offset_y = (((float)compass_cal_values[3] - compass_cal_values[2]) / 2 - compass_cal_values[3]) * compass_scale_y;
+  	compass_offset_z = (((float)compass_cal_values[5] - compass_cal_values[4]) / 2 - compass_cal_values[5]) * compass_scale_z;
+	compass_calibrated = true;
+}
+
 
 void IMU::reset()
 {
 	readMPU6050();
 	gyro_angle[0]= acc_angle[0];
 	gyro_angle[1] = acc_angle[1];
+	mag_x = 0;
+	mag_y = 0;
+	mag_z = 0;
 }
 
 
@@ -232,6 +279,28 @@ void IMU::Init_MS5611()
     temp_C6 = C[6] / pow(2,23);
 }
 
+void IMU::Calculate_Heading()
+{
+	if(compass_calibrated)
+	{
+		mag_y += compass_offset_y;                              //Add the y-offset to the raw value.
+    	mag_y *= compass_scale_y;                               //Scale the y-value so it matches the other axis.
+    	mag_z += compass_offset_z;                              //Add the z-offset to the raw value.
+    	mag_z *= compass_scale_z;                               //Scale the z-value so it matches the other axis.
+    	mag_x += compass_offset_x;
+	}
+
+	compass_x_horizontal = (float)mag_x * cos(gyro_angle[1] * -0.0174533) + (float)mag_y * sin(gyro_angle[0] * 0.0174533) * sin(gyro_angle[1] * -0.0174533) - (float)mag_z * cos(gyro_angle[0] * 0.0174533) * sin(gyro_angle[1] * -0.0174533);
+  	compass_y_horizontal = (float)mag_y * cos(gyro_angle[0] * 0.0174533) + (float)mag_z * sin(gyro_angle[0] * 0.0174533);
+	if (compass_y_horizontal < 0)actual_compass_heading = 180 + (180 + ((atan2(compass_y_horizontal, compass_x_horizontal)) * (180 / 3.14)));
+  	else actual_compass_heading = (atan2(compass_y_horizontal, compass_x_horizontal)) * (180 / 3.14);
+
+	if (actual_compass_heading < 0) actual_compass_heading += 360;         //If the compass heading becomes smaller then 0, 360 is added to keep it in the 0 till 360 degrees range.
+  	else if (actual_compass_heading >= 360) actual_compass_heading -= 360;
+
+	Serial.println(actual_compass_heading);
+
+}
 void IMU::Calculate_pressure(uint8_t OSR)
 {
 	pressure_read_counter++;

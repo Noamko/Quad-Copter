@@ -1,7 +1,8 @@
 #include "IMU.h"
 #include "PID.h"
 #include "config.h"
-#include "Telemetry.h"
+// #include "Telemetry.h"
+#include "GPS.h"
 
 //IMU variables
 IMU imu;
@@ -22,16 +23,16 @@ float pressure_setPoint;
 float setPoint_mag;
 
 //Telemetry variables
-Telemetry telemetry;
+// Telemetry telemetry;
 uint16_t telemetry_transmit_counter;
 int8_t telemetry_mode = -1;
 
 //Global variables
 int16_t battery_voltage;
 uint16_t esc_1, esc_2, esc_3, esc_4;
-uint16_t throttle, prev_throttle,throttle_base;
+int16_t throttle, prev_throttle,throttle_base;
 uint16_t deltaTime;
-uint16_t throttle_bias = 400;
+uint16_t throttle_bias = 300;
 
 uint32  loop_timer;
 uint32  esc_timer, esc_loop_timer;
@@ -46,11 +47,32 @@ bool alt_hold = false;
 bool engineStart = false;
 bool battery_connected = false;
 
+uint8_t flight_mode = 1;
+int16_t throttle_rate;
+bool pressure_setPoint_set = false;
+uint8_t start_Sequence = 0;
+float gps_roll_adjust_LP;
+uint32_t loop_counter = 0;
+
+//GPS
+GPS gps;
+int32_t gps_lat_error,gps_lon_error;
+int32_t gps_lat_error_prev, gps_lon_error_prev;
+uint8_t gps_rotating_mem_location;
+int32_t gps_lat_total_avarage, gps_lon_total_avarage;
+int32_t gps_lat_rotating_mem[40], gps_lon_rotating_mem[40];
+bool waypoint_set = 0;
+float gps_pitch_adjust_north, gps_pitch_adjust, gps_roll_adjust_north, gps_roll_adjust;
+float gps_p_gain = 2.7;
+float gps_d_gain = 6.5;
+int32_t lat_waypoint,lon_waypoint;
+int32_t pid_roll_setpoint_base,pid__setpoint_base;
+
+
 void setup() {
 	Serial.begin(9600);
-	telemetry.Init(1200);
-	delay(250);
-
+	// telemetry.Init(1200);
+	delay(350);
 	pinMode(IND_LED,OUTPUT);
 
 	pinMode(PB6, PWM);
@@ -71,7 +93,7 @@ void setup() {
 	pid_alt.Set_gains(3.0,0.01,3.0);
 
 	heading_setPoint = imu.Get_Heading();
-
+	gps.Init();
 	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
 }
 
@@ -80,17 +102,18 @@ void loop()
 	//Calculate delta time;
 	deltaTime = (micros() - prev_deltaTime);
 	prev_deltaTime = micros();
-
+	gps.Read();
 	//Imu calculations.
 	imu.Compute();
+	Rx_toValue(); 
 
 	//read battery battery_voltage
 	battery_voltage = analogRead(0) * VD_SCALE;
 
+
+	// if(gps.Active_satellites() >= 8 && loop_counter&5 == 0)_LED(!digitalRead(IND_LED));
 	if(StartEngines())
 	{
-		RC_toValue(); //convert channles values to Setpoints.
-
 		pid_roll.Compute(setPoint_roll - imu.Get_GyroX());
 		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
 		
@@ -101,12 +124,20 @@ void loop()
 		}
 		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ());
 
-		if(alt_hold)
+		if(alt_hold && pressure_setPoint_set)
 		{
-			pid_alt.Compute(imu.Get_pressure() - pressure_setPoint);
+			if(IsBetween(channel[THROTTLE],1505,2000)) pressure_setPoint -= 0.1;
+			else if(IsBetween(channel[THROTTLE],1000,1490)) pressure_setPoint += 0.1;
+
+			float alt_error = imu.Get_pressure() - pressure_setPoint;
+
+			pid_alt.Compute(alt_error);
 			throttle = THROTTLE_MIN_LIMIT + throttle_bias + pid_alt.output;
 		}
-		else throttle = channel[THROTTLE];
+		else
+		{
+			throttle = channel[THROTTLE];
+		} 
 
 		throttle = constrain(throttle,THROTTLE_MIN_LIMIT,THROTTLE_MAX_LIMIT);
 
@@ -117,7 +148,7 @@ void loop()
 		esc_4 = throttle + pid_roll.output + pid_pitch.output + pid_yaw.output;
 
 		//Calcualte the battery compensation
-		if(battery_voltage < 1280 && battery_voltage > 1050) {
+		if(IsBetween(battery_voltage,1050,1280)) {
 			battery_connected = true;
 			voltage_compensation = (1240 - battery_voltage) / (float)3500;
 		}
@@ -150,20 +181,11 @@ void loop()
 	loop_timer = micros();
 
 	Write_4Engines();
-
-	Telemetry_TR(telemetry_mode);
+	loop_counter++;
+	// Telemetry_TR(telemetry_mode);
 
 
 	//Serial Debuging
-	// Serial.println(imu.Get_pressure());
-	// Serial.println(imu.Get_GyroX_Angle());
-	// Serial.println(battery_voltage);
-	// Serial.println(imu.Get_Velocity());
-	// Serial.println(pid_alt.output);
-	// Serial.println(throttle);
-	// Serial.println(pid_yaw.output);
-	// Serial.println(imu.Get_Heading());
-	// Serial.print(",");
 	// Serial.print(channel[0]);
 	// Serial.print(",");
 	// Serial.print(channel[1]);
@@ -179,11 +201,6 @@ void loop()
 	// Serial.print(channel[6]);
 	// Serial.print(",");
 	// Serial.println(channel[7]);
-	// Serial.print(setPoint_roll);
-	// Serial.print(",");
-	// Serial.print(setPoint_pitch);
-	// Serial.print(",");
-	// Serial.println(setPoint_yaw);
 	// Serial.print(esc_1);
 	// Serial.print(",");
 	// Serial.print(esc_4);
@@ -193,29 +210,42 @@ void loop()
 	// Serial.println(esc_3);
 }
 
-void RC_toValue()
+void Rx_toValue()
 {
-	//Roll
-	setPoint_roll = 0;
-	if(channel[ROLL] > CH1_CENTERED + CONTROLLER_DEADBAND){
-		setPoint_roll = channel[ROLL] - CH1_CENTERED + CONTROLLER_DEADBAND;
-	}
-	else if(channel[ROLL] < CH1_CENTERED - CONTROLLER_DEADBAND){
-		setPoint_roll = channel[ROLL] - CH1_CENTERED - CONTROLLER_DEADBAND;
-	}
-	setPoint_roll /= controller_sensativity;
-	setPoint_roll -= imu.Roll_Level_Error();
+	if(flight_mode < 3)
+	{
+		//Roll
+		setPoint_roll = 0;
+		if(channel[ROLL] > CH1_CENTERED + CONTROLLER_DEADBAND){
+			setPoint_roll = channel[ROLL] - CH1_CENTERED + CONTROLLER_DEADBAND;
+		}
+		else if(channel[ROLL] < CH1_CENTERED - CONTROLLER_DEADBAND){
+			setPoint_roll = channel[ROLL] - CH1_CENTERED - CONTROLLER_DEADBAND;
+		}
+		setPoint_roll -= imu.Roll_Level_Error();
+		setPoint_roll /= controller_sensativity;
 
-	//Pitch
-	setPoint_pitch = 0;
-	if(channel[PITCH] > CH2_CENTERED + CONTROLLER_DEADBAND){
-		setPoint_pitch = channel[PITCH] - CH2_CENTERED + CONTROLLER_DEADBAND;
+		//Pitch
+		setPoint_pitch = 0;
+		if(channel[PITCH] > CH2_CENTERED + CONTROLLER_DEADBAND){
+			setPoint_pitch = channel[PITCH] - CH2_CENTERED + CONTROLLER_DEADBAND;
+		}
+		else if(channel[PITCH] < CH2_CENTERED - CONTROLLER_DEADBAND){
+			setPoint_pitch = channel[PITCH] - CH2_CENTERED - CONTROLLER_DEADBAND;
+		}
+		setPoint_pitch -= imu.Pitch_Level_Error();
+		setPoint_pitch /= controller_sensativity;
 	}
-	else if(channel[PITCH] < CH2_CENTERED - CONTROLLER_DEADBAND){
-		setPoint_pitch = channel[PITCH] - CH1_CENTERED - CONTROLLER_DEADBAND;
+	else if(flight_mode == 3)
+	{
+		setPoint_roll = gps_roll_adjust;
+		setPoint_roll -= imu.Roll_Level_Error();
+		setPoint_roll /= controller_sensativity;
+
+		setPoint_pitch = gps_pitch_adjust;
+		setPoint_pitch -= imu.Pitch_Level_Error();
+		setPoint_pitch /= controller_sensativity;
 	}
-	setPoint_pitch /= controller_sensativity;
-	setPoint_pitch -= imu.Pitch_Level_Error();
 
 	//Yaw
 	setPoint_yaw = 0;
@@ -223,18 +253,55 @@ void RC_toValue()
 	if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND ){
 		setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
 		setPoint_yaw /= CONTROLLER_SENSATIVITY;
-		mag_hold = false;
 	}
 	else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND){
-		setPoint_yaw = channel[YAW] - CH1_CENTERED - CONTROLLER_DEADBAND;
+		setPoint_yaw = channel[YAW] - CH4_CENTERED - CONTROLLER_DEADBAND;
 		setPoint_yaw /= CONTROLLER_SENSATIVITY;
-		mag_hold = false;
 	}
 
-	else if(setPoint_yaw == 0 && !mag_hold)
+
+	//AUX Channels
+	if(channel[4] <= 1001 && channel[5] >= 1999 && !engineStart)imu.Calibrate_gyro();
+
+	else if(channel[4] >= 1505 && channel[4] < 2000 && channel[5] >= 1999 && !engineStart) imu.Calibrate_acc();
+	else if(channel[4] >= 1999 && channel[5] >= 1999 && !engineStart) imu.Calibrate_compass();
+
+	if(IsBetween(channel[6],0,1050)) {
+		flight_mode = 1;
+		alt_hold = false;
+		pressure_setPoint_set = 0;
+		waypoint_set = 0;
+	}
+	else if(IsBetween(channel[6],1490,1550))
 	{
-		heading_setPoint = imu.Get_Heading();
-		if(mag_correction) mag_hold = true;
+		flight_mode = 2;
+		waypoint_set = 0;
+		alt_hold = true;
+		if(!pressure_setPoint_set)
+		{
+			pressure_setPoint = imu.Get_pressure();
+			pressure_setPoint_set = 1;
+		}
+	}
+	else if(IsBetween(channel[6],1990,2010))
+	{
+		flight_mode = 3;
+		alt_hold = true;
+		if(gps.Fix() >=3) 
+		{
+			if(!waypoint_set)
+			{
+				lat_waypoint = gps.lat();
+				lon_waypoint = gps.lon();
+				waypoint_set = 1;
+
+			}
+			else Calcualte_position_hold(lat_waypoint, lon_waypoint);
+		}
+	}
+
+	if(IsBetween(channel[7],1990,2005))
+	{
 	}
 }
 
@@ -244,46 +311,71 @@ void Write_4Engines()
 	TIMER4_BASE->CCR2 = esc_2;
 	TIMER4_BASE->CCR3 = esc_3;
 	TIMER4_BASE->CCR4 = esc_4;
+	TIMER4_BASE->CNT = 5000;
 }
 
 bool StartEngines()
 {
-	if
-	(channel[THROTTLE] <= MIN_THROTTLE_VALUE + CONTROLLER_DEADBAND
-	&& channel[THROTTLE] > 900
-	&& channel[YAW] >= channel_4_MAX_VALUE - CONTROLLER_DEADBAND)
+	if(IsBetween(channel[THROTTLE],990,1010) && IsBetween(channel[YAW],1990,2010))
 	{
 		//turn off engines and reset pid and imu angles
 		engineStart = false;
+		start_Sequence = 0;
+		gps_rotating_mem_location = 0;
+		gps_lon_rotating_mem[gps_rotating_mem_location] = 0;                                                 //Reset the current gps_lon_rotating_mem location.
+		gps_lat_rotating_mem[gps_rotating_mem_location] = 0;
+		gps_lat_error_prev = 0;
+		gps_lon_error_prev = 0;
+		gps_lat_total_avarage = 0;
+		gps_lon_total_avarage = 0;
 		pid_roll.Reset();
 		pid_pitch.Reset();
 		pid_yaw.Reset();
 		pid_mag.Reset();
 		pid_alt.Reset();
 		imu.reset();
-		alt_hold = false;
 	}
 
 	//Start engines.
-	else if
-	(channel[THROTTLE] <= MIN_THROTTLE_VALUE + CONTROLLER_DEADBAND
-	&& channel[THROTTLE] > 900
-	&& channel[YAW] <= channel_4_MIN_VALUE + CONTROLLER_DEADBAND)
-	{
-		engineStart = true;
-	}
+	else if (IsBetween(channel[THROTTLE],990,1010) && IsBetween(channel[YAW],990,1050)) start_Sequence = 1;
+	else if (IsBetween(channel[YAW],1490,1505) && start_Sequence) engineStart = true;
 
-	//Calibrate.
-	else if
-	(channel[THROTTLE] >= MAX_THROTTLE_VALUE - CONTROLLER_DEADBAND
-	&& channel[YAW] >= channel_4_MAX_VALUE - CONTROLLER_DEADBAND
-	&& !engineStart)
-	{
-		imu.Calibrate();
-	}
 	return engineStart;
 }
 
+void Calcualte_position_hold(int32_t lat_waypoint, int32_t lon_waypoint)
+{
+	gps_lat_error = gps.lat() - lat_waypoint;
+	gps_lon_error = gps.lon() - lon_waypoint;
+
+	// gps_lat_total_avarage -=  gps_lat_rotating_mem[ gps_rotating_mem_location];
+	// gps_lat_rotating_mem[ gps_rotating_mem_location] = gps_lat_error - gps_lat_error_prev;
+	// gps_lat_total_avarage +=  gps_lat_rotating_mem[ gps_rotating_mem_location];
+
+	// gps_lon_total_avarage -=  gps_lon_rotating_mem[gps_rotating_mem_location];
+	// gps_lon_rotating_mem[ gps_rotating_mem_location] = gps_lon_error - gps_lon_error_prev;
+	// gps_lon_total_avarage +=  gps_lon_rotating_mem[gps_rotating_mem_location];
+	// gps_rotating_mem_location++;                                                                        
+	// if (gps_rotating_mem_location == 35) gps_rotating_mem_location = 0;
+
+	gps_pitch_adjust_north = (float)gps_lat_error * gps_p_gain + (float)(gps_lat_error - gps_lat_error_prev) * gps_d_gain;
+	gps_roll_adjust_north = (float)gps_lon_error * gps_p_gain + (float)(gps_lon_error - gps_lon_error_prev) * gps_d_gain;
+
+	gps_roll_adjust = ((float)gps_roll_adjust_north * cos(imu.Get_Heading() * DEG_TO_RAD)) + ((float)gps_pitch_adjust_north * cos((imu.Get_Heading() - 90) * DEG_TO_RAD));
+	gps_pitch_adjust = ((float)gps_pitch_adjust_north * cos(imu.Get_Heading() * DEG_TO_RAD)) + ((float)gps_roll_adjust_north * cos((imu.Get_Heading() + 90) * DEG_TO_RAD));
+	
+	gps_lat_error_prev = gps_lat_error;
+	gps_lon_error_prev = gps_lon_error;
+	
+	gps_roll_adjust = constrain(gps_roll_adjust,-300,300);
+	gps_pitch_adjust = constrain(gps_pitch_adjust,-300,300);
+	gps_roll_adjust_LP = gps_roll_adjust_LP * 0.9 + gps_pitch_adjust_north * 0.1;
+
+	Serial.println(gps.lat());
+	// Serial.print(gps_lat_error);
+	// Serial.print(",");
+	// Serial.println(gps_roll_adjust_LP);
+}
 void channel_handler(void) {
 	measured_time = TIMER3_BASE->CCR1 - measured_time_start;
 	if (measured_time < 0)measured_time += 0xFFFF;
@@ -301,138 +393,138 @@ void channel_handler(void) {
 	if (channel_select_counter == 8) channel[7] = measured_time;
 }
 
-void Telemetry_TR(uint8_t mode)
-{
-	switch(mode)
-	{
-		case -1:
-		return;
+// void Telemetry_TR(uint8_t mode)
+// {
+// 	switch(mode)
+// 	{
+// 		case -1:
+// 		return;
 
-		case 0:
-		telemetry_transmit_counter++;
-		switch(telemetry_transmit_counter)
-		{
-			case 1:
-			break;
+// 		case 0:
+// 		telemetry_transmit_counter++;
+// 		switch(telemetry_transmit_counter)
+// 		{
+// 			case 1:
+// 			break;
 
-			case 10: 
-			telemetry.Transmit(String("BAT,") + battery_voltage + "\n");
-			break;
+// 			case 10: 
+// 			telemetry.Transmit(String("BAT,") + battery_voltage + "\n");
+// 			break;
 
-			case 20:
-			telemetry.Transmit(String("ENG,") + engineStart + "\n");
-			break;
+// 			case 20:
+// 			telemetry.Transmit(String("ENG,") + engineStart + "\n");
+// 			break;
 
-			case 30:
-			telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
-			break;
+// 			case 30:
+// 			telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
+// 			break;
 
-			case 40:
-			telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
-			telemetry.flush();
-			break;
+// 			case 40:
+// 			telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
+// 			telemetry.flush();
+// 			break;
 
-			case 50:
-			telemetry.Transmit(String("ALT,") + imu.Get_altitude() + "\n");
-			telemetry.flush();
-			break;
+// 			case 50:
+// 			telemetry.Transmit(String("ALT,") + imu.Get_altitude() + "\n");
+// 			telemetry.flush();
+// 			break;
 
-			case 60:
-			telemetry.Transmit(String("HED,") + imu.Get_Heading() + "\n");
-			telemetry_transmit_counter = 0;
-			telemetry.flush();
-			break;
+// 			case 60:
+// 			telemetry.Transmit(String("HED,") + imu.Get_Heading() + "\n");
+// 			telemetry_transmit_counter = 0;
+// 			telemetry.flush();
+// 			break;
 
-			case 70:
-			break;
-		}
-		break;
+// 			case 70:
+// 			break;
+// 		}
+// 		break;
 
-		case 1:
-		if(telemetry.Receive())
-		{
-			String data_in = String(telemetry.in_buffer);
-			if(data_in.startsWith("PID"))
-			{
-				float _p = atof(getValue(data_in,',',1));
-				float _i = atof(getValue(data_in,',',2));
-				float _d = atof(getValue(data_in,',',3));
-				if(data_in.startsWith("PID0")) pid_roll.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID1")) pid_pitch.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID2")) pid_yaw.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID3")) pid_mag.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID4"))	pid_alt.Set_gains(_p,_i,_d);
-			}
+// 		case 1:
+// 		if(telemetry.Receive())
+// 		{
+// 			String data_in = String(telemetry.in_buffer);
+// 			if(data_in.startsWith("PID"))
+// 			{
+// 				float _p = atof(getValue(data_in,',',1));
+// 				float _i = atof(getValue(data_in,',',2));
+// 				float _d = atof(getValue(data_in,',',3));
+// 				if(data_in.startsWith("PID0")) pid_roll.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID1")) pid_pitch.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID2")) pid_yaw.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID3")) pid_mag.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID4"))	pid_alt.Set_gains(_p,_i,_d);
+// 			}
 
-			else if(data_in.startsWith("HBS")) throttle_bias = atoi(getValue(data_in,',',1));
+// 			else if(data_in.startsWith("HBS")) throttle_bias = atoi(getValue(data_in,',',1));
 
-			else if(data_in.startsWith("TRR")) imu.roll_angle_offset = atof(getValue(data_in,',',1));
+// 			else if(data_in.startsWith("TRR")) imu.roll_angle_offset = atof(getValue(data_in,',',1));
 
-			else if(data_in.startsWith("TRP")) imu.pitch_angle_offset = atof(getValue(data_in,',',1));
-			telemetry.Transmit(String("OK\n"));
-		}
-		break;
+// 			else if(data_in.startsWith("TRP")) imu.pitch_angle_offset = atof(getValue(data_in,',',1));
+// 			telemetry.Transmit(String("OK\n"));
+// 		}
+// 		break;
 
-		case 2: //Ping pong..
-		if(telemetry.Receive())
-		{
-			String data_in = String(telemetry.in_buffer);
-			if(data_in.startsWith("PID"))
-			{
-				float _p = atof(getValue(data_in,',',1));
-				float _i = atof(getValue(data_in,',',2));
-				float _d = atof(getValue(data_in,',',3));
-				if(data_in.startsWith("PID0")) pid_roll.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID1")) pid_pitch.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID2")) pid_yaw.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID3")) pid_mag.Set_gains(_p,_i,_d);
-				else if(data_in.startsWith("PID4"))	pid_alt.Set_gains(_p,_i,_d);
-			}
+// 		case 2: //Ping pong..
+// 		if(telemetry.Receive())
+// 		{
+// 			String data_in = String(telemetry.in_buffer);
+// 			if(data_in.startsWith("PID"))
+// 			{
+// 				float _p = atof(getValue(data_in,',',1));
+// 				float _i = atof(getValue(data_in,',',2));
+// 				float _d = atof(getValue(data_in,',',3));
+// 				if(data_in.startsWith("PID0")) pid_roll.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID1")) pid_pitch.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID2")) pid_yaw.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID3")) pid_mag.Set_gains(_p,_i,_d);
+// 				else if(data_in.startsWith("PID4"))	pid_alt.Set_gains(_p,_i,_d);
+// 			}
 
-			else if(data_in.startsWith("HBS")) throttle_bias = atoi(getValue(data_in,',',1));
+// 			else if(data_in.startsWith("HBS")) throttle_bias = atoi(getValue(data_in,',',1));
 
-			else if(data_in.startsWith("TRR")) imu.roll_angle_offset = atof(getValue(data_in,',',1));
+// 			else if(data_in.startsWith("TRR")) imu.roll_angle_offset = atof(getValue(data_in,',',1));
 
-			else if(data_in.startsWith("TRP")) imu.pitch_angle_offset = atof(getValue(data_in,',',1));
+// 			else if(data_in.startsWith("TRP")) imu.pitch_angle_offset = atof(getValue(data_in,',',1));
 
-			else
-			{
-				telemetry_transmit_counter++;
-				switch(telemetry_transmit_counter)
-				{
-					case 1: 
-					telemetry.Transmit(String("BAT,") + battery_voltage + "\n");
-					break;
+// 			else
+// 			{
+// 				telemetry_transmit_counter++;
+// 				switch(telemetry_transmit_counter)
+// 				{
+// 					case 1: 
+// 					telemetry.Transmit(String("BAT,") + battery_voltage + "\n");
+// 					break;
 
-					case 2:
-					telemetry.Transmit(String("ENG,") + engineStart + "\n");
-					break;
+// 					case 2:
+// 					telemetry.Transmit(String("ENG,") + engineStart + "\n");
+// 					break;
 
-					case 3:
-					telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
-					break;
+// 					case 3:
+// 					telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
+// 					break;
 
-					case 4:
-					telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
-					telemetry.flush();
-					break;
+// 					case 4:
+// 					telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
+// 					telemetry.flush();
+// 					break;
 
-					case 5:
-					telemetry.Transmit(String("ALT,") + imu.Get_altitude() + "\n");
-					telemetry.flush();
-					break;
+// 					case 5:
+// 					telemetry.Transmit(String("ALT,") + imu.Get_altitude() + "\n");
+// 					telemetry.flush();
+// 					break;
 
-					case 6:
-					telemetry.Transmit(String("HED,") + imu.Get_Heading() + "\n");
-					telemetry_transmit_counter = 0;
-					telemetry.flush();
-					break;
-				}
-			}
-		}
-		break;
-	}
-}
+// 					case 6:
+// 					telemetry.Transmit(String("HED,") + imu.Get_Heading() + "\n");
+// 					telemetry_transmit_counter = 0;
+// 					telemetry.flush();
+// 					break;
+// 				}
+// 			}
+// 		}
+// 		break;
+// 	}
+// }
 
 char* getValue(String data, char separator, uint16_t index){
     uint16_t found = 0;
@@ -496,4 +588,10 @@ void Init_Timers()
   	TIMER3_BASE->PSC = 71;
   	TIMER3_BASE->ARR = 0xFFFF;
   	TIMER3_BASE->DCR = 0;
+}
+
+bool IsBetween(int32_t src,int32_t min,int32_t max)
+{
+	if(src >= min && src <= max ) return true;
+	else return false;
 }

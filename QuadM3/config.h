@@ -1,3 +1,5 @@
+#include <Arduino.h>
+#define _LED(x) digitalWrite(PC13, !x);
 #define invert(x) (-x)
 //Sensors
 #define MPU6050
@@ -23,7 +25,7 @@
 #define CH1_CENTERED        	(1500)
 #define CH2_CENTERED        	(1500)
 #define CH4_CENTERED        	(1500)
-#define CONTROLLER_DEADBAND 	(10)
+#define CONTROLLER_DEADBAND 	(3)
 #define CONTROLLER_SENSATIVITY 	(3.0F)
 
 //PID
@@ -51,6 +53,9 @@
 #define MAX_SERIAL_BUFFER		(30)
 #define VD_SCALE            	(0.3287671232876712)
 #define LOOP_TIME           	(2500)
+#define GYRO_MODE               (1)
+#define ALT_MODE                (2)
+#define GPS_MODE                (3)
 
 //Telemetry
 #define AT_PIN 					(PC14)

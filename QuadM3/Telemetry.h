@@ -2,7 +2,6 @@
 #define TELEMETRY_H
 
 #include "config.h"
-#include <Arduino.h>
 
 class Telemetry {
 private:

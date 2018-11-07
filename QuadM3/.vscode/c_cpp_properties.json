@@ -1,0 +1,19 @@
+{
+    "configurations": [
+        {
+            "name": "Arduino",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//system/libmaple/include",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//system/libmaple/stm32f1/include",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//system/libmaple/usb/stm32f1",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//system/libmaple/usb/usb_lib",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//cores//maple",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//variants//generic_stm32f103c",
+                "C://Program Files (x86)//Arduino//hardware//Arduino_STM32-master//STM32F1//libraries//Wire",
+                "C:/Program Files (x86)/Arduino/hardware/Arduino_STM32-master/STM32F1/system/libmaple"
+            ]
+        }
+    ],
+    "version": 4
+}

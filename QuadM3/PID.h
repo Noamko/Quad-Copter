@@ -2,7 +2,6 @@
 #define PID_H_
 
 #include "config.h"
-#include <Arduino.h>
 
 class PID
 {

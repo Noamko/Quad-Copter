@@ -2,7 +2,6 @@
 #define IMU_H
 
 #include <Wire.h>
-#include <Arduino.h>
 #include "config.h"
 
 class IMU
@@ -12,11 +11,14 @@ public:
 	void Init();
 	void reset();
 	void Compute();
-	void Calibrate();
+	void Calibrate_gyro();
+	void Calibrate_acc();
+	void Calibrate_compass();
 	void setAL_Mul(float mul);
 	float Roll_Level_Error();
 	float Pitch_Level_Error();
 	float Get_Heading();
+	void Calculate_Heading();
 	float Get_GyroX_Angle();
 	float Get_GyroY_Angle();
 	float Get_pressure();
@@ -33,6 +35,7 @@ public:
 	int16_t Get_GyroZ();
 	void Calculate_pressure(uint8_t OSR);
 	float roll_angle_offset = 0.0f, pitch_angle_offset = 0.0f;
+	bool compass_calibrated = false;
 
 private:
 	void InitHMC58331();
@@ -61,7 +64,14 @@ private:
 	//HMC5883L
 	float mag_angle;
 	float heading;
+	float compass_x_horizontal, compass_y_horizontal,actual_compass_heading;
 	int16_t mag_x,mag_y,mag_z;
+	int16_t compass_cal_values[6];
+	int16_t compass_offset_x, compass_offset_y, compass_offset_z;
+	float course_a, course_b, course_c, base_course_mirrored, actual_course_mirrored;
+	float course_lock_heading, heading_lock_course_deviation;
+	float compass_scale_y, compass_scale_z;
+	
 
 	//MPU6050 variables
 	bool calibrated = false;
