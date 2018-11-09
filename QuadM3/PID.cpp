@@ -7,14 +7,11 @@ PID::PID()
 
 }
 
-//Basic Gyro based PID
 void PID::Compute(float error)
 {
 	p_Term = error * Kp;
-	p_Term = constrain(p_Term, -MAX_P,MAX_P);
 
 	i_Term += error;
-	i_Term = constrain(i_Term, -MAX_I, MAX_I);
 	i_Term *= Ki;
 
 	d_Term = error - prev_error;
@@ -22,6 +19,57 @@ void PID::Compute(float error)
 	prev_error = error;
 
 	output = p_Term + i_Term + d_Term;
+}
+
+void PID::Compute(float error,int16_t max_p,int16_t max_i)
+{
+	p_Term = error * Kp;
+	p_Term = constrain(p_Term, -max_p,max_p);
+
+	i_Term += error;
+	i_Term = constrain(i_Term, -max_i, max_i);
+	i_Term *= Ki;
+
+	d_Term = error - prev_error;
+	d_Term *= Kd;
+	prev_error = error;
+
+	output = p_Term + i_Term + d_Term;
+}
+
+
+void PID::Compute(float error,int16_t max_p,int16_t max_i,int16_t output_lim)
+{
+	p_Term = error * Kp;
+	p_Term = constrain(p_Term, -max_p,max_p);
+
+	i_Term += error;
+	i_Term = constrain(i_Term, -max_i, max_i);
+	i_Term *= Ki;
+
+	d_Term = error - prev_error;
+	d_Term *= Kd;
+	prev_error = error;
+
+	output = p_Term + i_Term + d_Term;
+
+	output = constrain(output,-output_lim,output_lim);
+}
+
+void PID::Compute(float error,int16_t output_lim)
+{
+	p_Term = error * Kp;
+
+	i_Term += error;
+	i_Term *= Ki;
+
+	d_Term = error - prev_error;
+	d_Term *= Kd;
+	prev_error = error;
+
+	output = p_Term + i_Term + d_Term;
+
+	output = constrain(output,-output_lim,output_lim);
 }
 
 void PID::Set_gains(float k_p,float k_i,float k_d)

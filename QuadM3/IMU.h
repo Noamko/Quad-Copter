@@ -11,8 +11,7 @@ public:
 	void Init();
 	void reset();
 	void Compute();
-	void Calibrate_gyro();
-	void Calibrate_acc();
+	void Calibrate_IMU();
 	void Calibrate_compass();
 	void setAL_Mul(float mul);
 	float Roll_Level_Error();
@@ -36,6 +35,10 @@ public:
 	void Calculate_pressure(uint8_t OSR);
 	float roll_angle_offset = 0.0f, pitch_angle_offset = 0.0f;
 	bool compass_calibrated = false;
+	float total_acc_vector = 0;
+	float vertical_acceleration_raw = 0;
+	float vertical_acceleration = 0;
+
 
 private:
 	void InitHMC58331();
@@ -43,6 +46,7 @@ private:
 	void InitMPU6050();
 	void readMPU6050();
 	void read_HMC5883L();
+	float course_deviation(float course_b, float course_c);
 
 	//MS5611 variables
 	uint8_t temperature_read_counter = 0;
@@ -63,14 +67,15 @@ private:
 
 	//HMC5883L
 	float mag_angle;
-	float heading;
-	float compass_x_horizontal, compass_y_horizontal,actual_compass_heading;
+	float compass_heading;
+	float compass_x_horizontal, compass_y_horizontal;
 	int16_t mag_x,mag_y,mag_z;
 	int16_t compass_cal_values[6];
 	int16_t compass_offset_x, compass_offset_y, compass_offset_z;
 	float course_a, course_b, course_c, base_course_mirrored, actual_course_mirrored;
 	float course_lock_heading, heading_lock_course_deviation;
 	float compass_scale_y, compass_scale_z;
+	
 	
 
 	//MPU6050 variables
@@ -79,16 +84,18 @@ private:
 	float gyro_data[3];
 	float acc_angle[2];
 	float gyro_angle[2];
+	float roll_angle, pitch_angle,yaw_angle;
 	float gyro_offset[3];
+	int16_t acc_offset[3];
+	float total_acc_vector_offset;
 	float z_velocity;
-	double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
-	double gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
+	// double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
+	// double gyro_time_radians = 0.0000010658499149940325878560543060302734375; //converted to radians
 	int16_t gyro_raw[3];
 	int16_t acc_raw[3];
 	int16_t mpu6050_temperature;
-	int16_t accz_offset;
-	int16_t acc_z;
 	int16_t prev_acc;
+	uint8_t gyro_angle_reset_counter = 0;
 
 	 //General
 	 float roll_level_ajust;

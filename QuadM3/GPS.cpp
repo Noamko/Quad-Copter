@@ -26,6 +26,7 @@ void GPS::Read()
   //Place each GPS message in a line.
   while(Serial1.available()){
       char s1_byte = Serial1.read();
+      // Serial.print(s1_byte);
       switch (s1_byte) {
 
           case '$':
@@ -34,7 +35,8 @@ void GPS::Read()
           break;
 
           case '*':
-          if(NMEA_line[0] == 'G') new_line_found = 1;
+          if(NMEA_line[0] == 'G' && strlen(NMEA_line) > 10) new_line_found = 1;
+          // Serial.println(Split(NMEA_line,',',0));
           break;
 
           default:
@@ -95,6 +97,7 @@ $GNGGA,190339.60,3212.69713,N,03459.21110,E,1,08,1.08,97.5,M,17.7,M,,*7E
       min_to_dec /= 60.0f;
       raw_longitude += min_to_dec;
       
+      
       //Satellites
       _sats = NMEA_CharToInt(NMEA_line[45]) * 10;
       _sats += NMEA_CharToInt(NMEA_line[46]);
@@ -103,6 +106,28 @@ $GNGGA,190339.60,3212.69713,N,03459.21110,E,1,08,1.08,97.5,M,17.7,M,,*7E
     else if(NMEA_line[2] == 'G' && NMEA_line[3] == 'S' && NMEA_line[4] == 'A')
     {
       fix_t = NMEA_CharToInt(NMEA_line[8]);
+    }
+
+
+    //GPS hold
+    if(gps_hold_flag)
+    {
+      gps_hold_flag = 0;
+      lat_waypoint = raw_latitude;
+      lon_waypoint = raw_longitude;
+      waypoint_set = 1;
+    }
+    if(lat_waypoint)
+    {
+      gps_lat_error = raw_latitude*1000000 - lat_waypoint*1000000;
+      gps_lon_error = raw_longitude*1000000 - lon_waypoint*1000000;
+
+
+	    gps_pitch_adjust_north = (float)gps_lat_error * gps_p_gain + (float)(gps_lat_error - gps_lat_error_prev) * gps_d_gain;
+	    gps_roll_adjust_north = (float)gps_lon_error * gps_p_gain + (float)(gps_lon_error - gps_lon_error_prev) * gps_d_gain;
+	    
+      gps_lat_error_prev = gps_lat_error;
+	    gps_lon_error_prev = gps_lon_error;
     }
   }
 }
@@ -123,34 +148,6 @@ uint8_t GPS::Fix()
 uint8_t GPS::Active_satellites()
 {
   return _sats;
-}
-
-char* GPS::getValue(String data, char separator, uint16_t index){
-    uint16_t found = 0;
-    int16_t strIndex[] = { 0, -1 };
-    int16_t maxIndex = data.length() - 1; 				//This is a signed int in case data length is 0
-
-    for (uint16_t i = 0; i <= maxIndex && found <= index; i++) {
-
-        if (data.charAt(i) == separator || i == maxIndex) {
-            found++;
-            strIndex[0] = strIndex[1] + 1;
-            strIndex[1] = (i == maxIndex) ? i+1 : i;
-        }
-    }
-
-    if(found > index)
-    {
-    	String res = data.substring(strIndex[0], strIndex[1]);
-    	char value[sizeof(res)];
-    	for(uint16_t i = 0; i < sizeof(res); i++)
-    	{
-    		value[i] = res[i];
-    	}
-
-    	return value;
-    }
-    else return "";
 }
 
 int GPS::NMEA_CharToInt(char in)

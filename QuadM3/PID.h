@@ -8,6 +8,9 @@ class PID
 public:
 	PID();
 	void Compute(float error);
+	void Compute(float error,int16_t output_lim);
+	void Compute(float error,int16_t max_p,int16_t max_i);
+	void Compute(float error,int16_t max_p,int16_t max_i,int16_t output_lim);
 	void Set_gains(float k_p,float k_i,float k_d);
 	void Reset();
 

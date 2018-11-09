@@ -12,11 +12,18 @@ uint8_t channel_select_counter;
 int32_t measured_time, measured_time_start;
 uint8_t aux1,prev_aux1;
 float controller_sensativity = 3.0f;
+float heading_lock_course_deviation, roll_mag_ajt,pitch_mag_ajt;
+float course_lock_heading;
+float yaw_mag_correction;
+bool mag_correction_set = 0;
+bool head_lock_set = 0;
+float low_pass_heading;
 
 //PID variables
 PID pid_roll, pid_pitch, pid_yaw;
 PID pid_mag;
 PID pid_alt;
+PID pid_gps;
 int16_t setPoint_roll,setPoint_pitch,setPoint_yaw;
 float setPoint_altitude;
 float pressure_setPoint;
@@ -29,7 +36,7 @@ int8_t telemetry_mode = -1;
 
 //Global variables
 int16_t battery_voltage;
-uint16_t esc_1, esc_2, esc_3, esc_4;
+uint16_t esc[4];
 int16_t throttle, prev_throttle,throttle_base;
 uint16_t deltaTime;
 uint16_t throttle_bias = 300;
@@ -41,7 +48,7 @@ uint32  prev_deltaTime;
 float heading_setPoint;
 float voltage_compensation;
 
-bool mag_hold = false;
+bool Heading_lock = false;
 bool mag_correction = true;
 bool alt_hold = false;
 bool engineStart = false;
@@ -51,23 +58,12 @@ uint8_t flight_mode = 1;
 int16_t throttle_rate;
 bool pressure_setPoint_set = false;
 uint8_t start_Sequence = 0;
-float gps_roll_adjust_LP;
 uint32_t loop_counter = 0;
 
 //GPS
 GPS gps;
-int32_t gps_lat_error,gps_lon_error;
-int32_t gps_lat_error_prev, gps_lon_error_prev;
-uint8_t gps_rotating_mem_location;
-int32_t gps_lat_total_avarage, gps_lon_total_avarage;
-int32_t gps_lat_rotating_mem[40], gps_lon_rotating_mem[40];
-bool waypoint_set = 0;
-float gps_pitch_adjust_north, gps_pitch_adjust, gps_roll_adjust_north, gps_roll_adjust;
-float gps_p_gain = 2.7;
-float gps_d_gain = 6.5;
-int32_t lat_waypoint,lon_waypoint;
-int32_t pid_roll_setpoint_base,pid__setpoint_base;
-
+bool gps_hold_set = 0;
+float gps_roll_ajt,gps_pitch_ajt;
 
 void setup() {
 	Serial.begin(9600);
@@ -88,13 +84,13 @@ void setup() {
 	//PID still need some tweak
 	pid_roll.Set_gains(1.6, 0.03, 6.5);
 	pid_pitch.Set_gains(1.6, 0.03, 6.5);
-	pid_yaw.Set_gains(10, 0.05, 10);
-	pid_mag.Set_gains(1.2,0.01,2.0);
+	pid_yaw.Set_gains(5.0, 0.01, 5.0);
+	pid_mag.Set_gains(0.8,0.00,2.0);
 	pid_alt.Set_gains(3.0,0.01,3.0);
 
 	heading_setPoint = imu.Get_Heading();
 	gps.Init();
-	GPIOC_BASE->BSRR = (0b1 << 13);  //turn off Pin PC13
+	digitalWrite(IND_LED,1);
 }
 
 void loop()
@@ -102,8 +98,8 @@ void loop()
 	//Calculate delta time;
 	deltaTime = (micros() - prev_deltaTime);
 	prev_deltaTime = micros();
-	gps.Read();
-	//Imu calculations.
+
+	// gps.Read();
 	imu.Compute();
 	Rx_toValue(); 
 
@@ -111,18 +107,12 @@ void loop()
 	battery_voltage = analogRead(0) * VD_SCALE;
 
 
-	// if(gps.Active_satellites() >= 8 && loop_counter&5 == 0)_LED(!digitalRead(IND_LED));
 	if(StartEngines())
 	{
-		pid_roll.Compute(setPoint_roll - imu.Get_GyroX());
-		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY());
+		pid_roll.Compute(setPoint_roll - imu.Get_GyroX(),300,200);
+		pid_pitch.Compute(invert(setPoint_pitch) - imu.Get_GyroY(),300,200);
 		
-		if(mag_hold)
-		{
-			pid_mag.Compute(heading_setPoint - imu.Get_Heading());
-			setPoint_yaw = constrain(pid_mag.output,-50,50);
-		}
-		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ());
+		pid_yaw.Compute(invert(setPoint_yaw)  - imu.Get_GyroZ(),300);
 
 		if(alt_hold && pressure_setPoint_set)
 		{
@@ -131,21 +121,21 @@ void loop()
 
 			float alt_error = imu.Get_pressure() - pressure_setPoint;
 
-			pid_alt.Compute(alt_error);
+			pid_alt.Compute(alt_error,300);
 			throttle = THROTTLE_MIN_LIMIT + throttle_bias + pid_alt.output;
 		}
 		else
 		{
-			throttle = channel[THROTTLE];
+			throttle = channel[THROTTLE] - 100;
 		} 
 
 		throttle = constrain(throttle,THROTTLE_MIN_LIMIT,THROTTLE_MAX_LIMIT);
 
 		//Calculate the value for each motor
-		esc_1 = throttle + pid_roll.output - pid_pitch.output - pid_yaw.output;
-		esc_2 = throttle - pid_roll.output - pid_pitch.output + pid_yaw.output;
-		esc_3 = throttle - pid_roll.output + pid_pitch.output - pid_yaw.output;
-		esc_4 = throttle + pid_roll.output + pid_pitch.output + pid_yaw.output;
+		esc[0] = throttle + pid_roll.output - pid_pitch.output - pid_yaw.output;
+		esc[1] = throttle - pid_roll.output - pid_pitch.output + pid_yaw.output;
+		esc[2] = throttle - pid_roll.output + pid_pitch.output - pid_yaw.output;
+		esc[3] = throttle + pid_roll.output + pid_pitch.output + pid_yaw.output;
 
 		//Calcualte the battery compensation
 		if(IsBetween(battery_voltage,1050,1280)) {
@@ -157,63 +147,57 @@ void loop()
 		//add the battery compensation to each motor.
 		if(battery_connected)
 		{
-			esc_1 += esc_1 * voltage_compensation;
-			esc_2 += esc_2 * voltage_compensation;
-			esc_3 += esc_3 * voltage_compensation;
-			esc_4 += esc_4 * voltage_compensation;
+			esc[0] += esc[0] * voltage_compensation;
+			esc[1] += esc[1] * voltage_compensation;
+			esc[2] += esc[2] * voltage_compensation;
+			esc[3] += esc[3] * voltage_compensation;
 		}
 
-		esc_1 = constrain(esc_1, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
-		esc_2 = constrain(esc_2, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
-		esc_3 = constrain(esc_3, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
-		esc_4 = constrain(esc_4, ESC_MIN_LIMIT, ESC_MAX_LIMIT);
+		esc[0] = constrain(esc[0], ESC_MIN_LIMIT, ESC_MAX_LIMIT);
+		esc[1] = constrain(esc[1], ESC_MIN_LIMIT, ESC_MAX_LIMIT);
+		esc[2] = constrain(esc[2], ESC_MIN_LIMIT, ESC_MAX_LIMIT);
+		esc[3] = constrain(esc[3], ESC_MIN_LIMIT, ESC_MAX_LIMIT);
 	}
 
 	else //Turn engines off 
 	{ 
-		esc_1 = ESC_OFF;
-		esc_2 = ESC_OFF;
-		esc_3 = ESC_OFF;
-		esc_4 = ESC_OFF;
+		esc[0] = ESC_OFF;
+		esc[1] = ESC_OFF;
+		esc[2] = ESC_OFF;
+		esc[3] = ESC_OFF;
 	}
 
-	while(micros() - loop_timer < LOOP_TIME); //should sync loop speed with esc's, not sure if neccecery
+	while(micros() - loop_timer < LOOP_TIME); //check to see if lowering loop time below 4ms give better fly results (make sure imu calculations dont depends on 4ms loop time)
 	loop_timer = micros();
 
 	Write_4Engines();
 	loop_counter++;
+	if(!(loop_counter%250) && gps.Fix() >=3 && gps.Active_satellites() >=8) 
+	{
+		digitalWrite(IND_LED,!digitalRead(IND_LED));
+	}
+	else digitalWrite(IND_LED,1);
 	// Telemetry_TR(telemetry_mode);
 
 
 	//Serial Debuging
-	// Serial.print(channel[0]);
+	// for(uint8_t i = 0; i < 8; i++)
+	// {
+	// 	Serial.print(",");
+	// 	Serial.print(channel[i]);
+	// }
+	// Serial.println();
+	// Serial.print(esc[0]);
 	// Serial.print(",");
-	// Serial.print(channel[1]);
+	// Serial.print(esc[3]);
 	// Serial.print(",");
-	// Serial.print(channel[2]);
+	// Serial.print(esc[1]);
 	// Serial.print(",");
-	// Serial.print(channel[3]);
-	// Serial.print(",");
-	// Serial.print(channel[4]);
-	// Serial.print(",");
-	// Serial.print(channel[5]);
-	// Serial.print(",");
-	// Serial.print(channel[6]);
-	// Serial.print(",");
-	// Serial.println(channel[7]);
-	// Serial.print(esc_1);
-	// Serial.print(",");
-	// Serial.print(esc_4);
-	// Serial.print(",");
-	// Serial.print(esc_2);
-	// Serial.print(",");
-	// Serial.println(esc_3);
+	// Serial.println(esc[2]);
+	// Serial.println(setPoint_yaw);
 }
-
 void Rx_toValue()
 {
-	if(flight_mode < 3)
-	{
 		//Roll
 		setPoint_roll = 0;
 		if(channel[ROLL] > CH1_CENTERED + CONTROLLER_DEADBAND){
@@ -222,8 +206,6 @@ void Rx_toValue()
 		else if(channel[ROLL] < CH1_CENTERED - CONTROLLER_DEADBAND){
 			setPoint_roll = channel[ROLL] - CH1_CENTERED - CONTROLLER_DEADBAND;
 		}
-		setPoint_roll -= imu.Roll_Level_Error();
-		setPoint_roll /= controller_sensativity;
 
 		//Pitch
 		setPoint_pitch = 0;
@@ -233,84 +215,140 @@ void Rx_toValue()
 		else if(channel[PITCH] < CH2_CENTERED - CONTROLLER_DEADBAND){
 			setPoint_pitch = channel[PITCH] - CH2_CENTERED - CONTROLLER_DEADBAND;
 		}
-		setPoint_pitch -= imu.Pitch_Level_Error();
-		setPoint_pitch /= controller_sensativity;
-	}
-	else if(flight_mode == 3)
-	{
-		setPoint_roll = gps_roll_adjust;
+
+		// Calculate_GPS_hold();
+
+		// setPoint_roll += gps_roll_ajt;
 		setPoint_roll -= imu.Roll_Level_Error();
 		setPoint_roll /= controller_sensativity;
 
-		setPoint_pitch = gps_pitch_adjust;
+		// setPoint_pitch += gps_pitch_ajt;
 		setPoint_pitch -= imu.Pitch_Level_Error();
 		setPoint_pitch /= controller_sensativity;
-	}
 
 	//Yaw
-	setPoint_yaw = 0;
+	if(channel[THROTTLE] > 1100)
+	{
+		setPoint_yaw = 0;
 
-	if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND ){
-		setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
-		setPoint_yaw /= CONTROLLER_SENSATIVITY;
+		if(channel[YAW] > CH4_CENTERED + CONTROLLER_DEADBAND ){
+			setPoint_yaw = channel[YAW] - CH4_CENTERED + CONTROLLER_DEADBAND;
+			setPoint_yaw /= CONTROLLER_SENSATIVITY;
+			mag_correction_set = 0;
+		}
+		else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND){
+			setPoint_yaw = channel[YAW] - CH4_CENTERED - CONTROLLER_DEADBAND;
+			setPoint_yaw /= CONTROLLER_SENSATIVITY;
+			mag_correction_set = 0;
+		}
+		//centered
+		else if(mag_correction)
+		{
+			if(imu.Get_Heading() > 2 && imu.Get_Heading() < 358) //avoid jumping between 0 and 360
+			{
+				if(mag_correction_set)
+				{
+					low_pass_heading = low_pass_heading *0.8 + imu.Get_Heading() *0.2;
+					pid_mag.Compute(low_pass_heading - yaw_mag_correction);
+					setPoint_yaw = pid_mag.output *-1;
+					setPoint_yaw = constrain(setPoint_yaw,-20,20);
+				}
+				else
+				{
+					yaw_mag_correction = imu.Get_Heading();
+					mag_correction_set = 1;
+				}
+			}
+		}
 	}
-	else if(channel[YAW] < CH4_CENTERED - CONTROLLER_DEADBAND){
-		setPoint_yaw = channel[YAW] - CH4_CENTERED - CONTROLLER_DEADBAND;
-		setPoint_yaw /= CONTROLLER_SENSATIVITY;
-	}
-
 
 	//AUX Channels
-	if(channel[4] <= 1001 && channel[5] >= 1999 && !engineStart)imu.Calibrate_gyro();
 
-	else if(channel[4] >= 1505 && channel[4] < 2000 && channel[5] >= 1999 && !engineStart) imu.Calibrate_acc();
-	else if(channel[4] >= 1999 && channel[5] >= 1999 && !engineStart) imu.Calibrate_compass();
-
-	if(IsBetween(channel[6],0,1050)) {
+	//Aux1
+	if(IsBetween(channel[AUX_1],990,1050)) {
 		flight_mode = 1;
 		alt_hold = false;
 		pressure_setPoint_set = 0;
-		waypoint_set = 0;
+		gps_hold_set = 0;
 	}
-	else if(IsBetween(channel[6],1490,1550))
+	else if(IsBetween(channel[AUX_1],1490,1550))
 	{
 		flight_mode = 2;
-		waypoint_set = 0;
 		alt_hold = true;
+		gps_hold_set = 0;
 		if(!pressure_setPoint_set)
 		{
 			pressure_setPoint = imu.Get_pressure();
 			pressure_setPoint_set = 1;
 		}
 	}
-	else if(IsBetween(channel[6],1990,2010))
+	else if(IsBetween(channel[AUX_1],1990,2010))
 	{
 		flight_mode = 3;
 		alt_hold = true;
 		if(gps.Fix() >=3) 
 		{
-			if(!waypoint_set)
+			if(!gps_hold_set)
 			{
-				lat_waypoint = gps.lat();
-				lon_waypoint = gps.lon();
-				waypoint_set = 1;
-
+				gps.gps_hold_flag = 1;
+				gps_hold_set = 1;
 			}
-			else Calcualte_position_hold(lat_waypoint, lon_waypoint);
+		}
+
+		if(!pressure_setPoint_set)
+		{
+			pressure_setPoint = imu.Get_pressure();
+			pressure_setPoint_set = 1;
 		}
 	}
 
-	if(IsBetween(channel[7],1990,2005))
+	//Aux2
+	if(IsBetween(channel[AUX_2],990,1050))
 	{
+	}
+	else if(IsBetween(channel[AUX_2],1490,1550))
+	{
+	}
+	else if(IsBetween(channel[AUX_2],1990,2005))
+	{
+		if(!engineStart) imu.Calibrate_IMU();
+	}
+
+	//Aux3
+	if(IsBetween(channel[AUX_3],990,1050))
+	{
+	}
+	else if(IsBetween(channel[AUX_3],1490,1550))
+	{
+	}
+	else if(IsBetween(channel[AUX_3],1990,2005))
+	{
+	}
+
+	//Aux4
+	if(IsBetween(channel[AUX_4],990,1050))
+	{
+		head_lock_set = 0;
+	}
+	else if(IsBetween(channel[AUX_4],1490,1550))
+	{
+	}
+	else if(IsBetween(channel[AUX_4],1990,2005))
+	{
+		if(!head_lock_set)
+		{
+			head_lock_set = 1;
+			heading_lock_course_deviation = imu.Get_Heading();
+		}
 	}
 }
 
 void Write_4Engines()
 {
-	TIMER4_BASE->CCR1 = esc_1;
-	TIMER4_BASE->CCR2 = esc_2;
-	TIMER4_BASE->CCR3 = esc_3;
-	TIMER4_BASE->CCR4 = esc_4;
+	TIMER4_BASE->CCR1 = esc[0];
+	TIMER4_BASE->CCR2 = esc[1];
+	TIMER4_BASE->CCR3 = esc[2];
+	TIMER4_BASE->CCR4 = esc[3];
 	TIMER4_BASE->CNT = 5000;
 }
 
@@ -321,13 +359,6 @@ bool StartEngines()
 		//turn off engines and reset pid and imu angles
 		engineStart = false;
 		start_Sequence = 0;
-		gps_rotating_mem_location = 0;
-		gps_lon_rotating_mem[gps_rotating_mem_location] = 0;                                                 //Reset the current gps_lon_rotating_mem location.
-		gps_lat_rotating_mem[gps_rotating_mem_location] = 0;
-		gps_lat_error_prev = 0;
-		gps_lon_error_prev = 0;
-		gps_lat_total_avarage = 0;
-		gps_lon_total_avarage = 0;
 		pid_roll.Reset();
 		pid_pitch.Reset();
 		pid_yaw.Reset();
@@ -343,39 +374,6 @@ bool StartEngines()
 	return engineStart;
 }
 
-void Calcualte_position_hold(int32_t lat_waypoint, int32_t lon_waypoint)
-{
-	gps_lat_error = gps.lat() - lat_waypoint;
-	gps_lon_error = gps.lon() - lon_waypoint;
-
-	// gps_lat_total_avarage -=  gps_lat_rotating_mem[ gps_rotating_mem_location];
-	// gps_lat_rotating_mem[ gps_rotating_mem_location] = gps_lat_error - gps_lat_error_prev;
-	// gps_lat_total_avarage +=  gps_lat_rotating_mem[ gps_rotating_mem_location];
-
-	// gps_lon_total_avarage -=  gps_lon_rotating_mem[gps_rotating_mem_location];
-	// gps_lon_rotating_mem[ gps_rotating_mem_location] = gps_lon_error - gps_lon_error_prev;
-	// gps_lon_total_avarage +=  gps_lon_rotating_mem[gps_rotating_mem_location];
-	// gps_rotating_mem_location++;                                                                        
-	// if (gps_rotating_mem_location == 35) gps_rotating_mem_location = 0;
-
-	gps_pitch_adjust_north = (float)gps_lat_error * gps_p_gain + (float)(gps_lat_error - gps_lat_error_prev) * gps_d_gain;
-	gps_roll_adjust_north = (float)gps_lon_error * gps_p_gain + (float)(gps_lon_error - gps_lon_error_prev) * gps_d_gain;
-
-	gps_roll_adjust = ((float)gps_roll_adjust_north * cos(imu.Get_Heading() * DEG_TO_RAD)) + ((float)gps_pitch_adjust_north * cos((imu.Get_Heading() - 90) * DEG_TO_RAD));
-	gps_pitch_adjust = ((float)gps_pitch_adjust_north * cos(imu.Get_Heading() * DEG_TO_RAD)) + ((float)gps_roll_adjust_north * cos((imu.Get_Heading() + 90) * DEG_TO_RAD));
-	
-	gps_lat_error_prev = gps_lat_error;
-	gps_lon_error_prev = gps_lon_error;
-	
-	gps_roll_adjust = constrain(gps_roll_adjust,-300,300);
-	gps_pitch_adjust = constrain(gps_pitch_adjust,-300,300);
-	gps_roll_adjust_LP = gps_roll_adjust_LP * 0.9 + gps_pitch_adjust_north * 0.1;
-
-	Serial.println(gps.lat());
-	// Serial.print(gps_lat_error);
-	// Serial.print(",");
-	// Serial.println(gps_roll_adjust_LP);
-}
 void channel_handler(void) {
 	measured_time = TIMER3_BASE->CCR1 - measured_time_start;
 	if (measured_time < 0)measured_time += 0xFFFF;
@@ -393,6 +391,23 @@ void channel_handler(void) {
 	if (channel_select_counter == 8) channel[7] = measured_time;
 }
 
+
+void Calculate_GPS_hold()
+{
+	if(flight_mode >=3)
+	{
+		gps_roll_ajt = ((float)gps.gps_roll_adjust_north * cos(imu.Get_Heading() * 0.017453)) + ((float)gps.gps_pitch_adjust_north * cos((imu.Get_Heading() - 90) * 0.017453));
+		gps_pitch_ajt = ((float)gps.gps_pitch_adjust_north * cos(imu.Get_Heading() * 0.017453)) + ((float)gps.gps_roll_adjust_north * cos((imu.Get_Heading() + 90) * 0.017453));
+
+		gps_roll_ajt = constrain(gps_roll_ajt,-100,100);
+		gps_pitch_ajt = constrain(gps_pitch_ajt,-100,100);
+	}
+	else 
+	{
+		gps_pitch_ajt = 0;
+		gps_roll_ajt = 0;
+	}
+}
 // void Telemetry_TR(uint8_t mode)
 // {
 // 	switch(mode)
@@ -588,6 +603,20 @@ void Init_Timers()
   	TIMER3_BASE->PSC = 71;
   	TIMER3_BASE->ARR = 0xFFFF;
   	TIMER3_BASE->DCR = 0;
+}
+
+float course_deviation(float course_b, float course_c) {
+	float base_course_mirrored,actual_course_mirrored;
+	float course_a = course_b - course_c;
+	
+	if (course_a < -180 || course_a > 180) {
+	  if (course_c > 180)base_course_mirrored = course_c - 180;
+	  else base_course_mirrored = course_c + 180;
+	  if (course_b > 180)actual_course_mirrored = course_b - 180;
+	  else actual_course_mirrored = course_b + 180;
+	  course_a = actual_course_mirrored - base_course_mirrored;
+	}
+  return course_a;
 }
 
 bool IsBetween(int32_t src,int32_t min,int32_t max)
