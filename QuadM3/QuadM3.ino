@@ -12,11 +12,8 @@ uint8_t channel_select_counter;
 int32_t measured_time, measured_time_start;
 uint8_t aux1,prev_aux1;
 float controller_sensativity = 3.0f;
-float heading_lock_course_deviation, roll_mag_ajt,pitch_mag_ajt;
-float course_lock_heading;
 float yaw_mag_correction;
 bool mag_correction_set = 0;
-bool head_lock_set = 0;
 float low_pass_heading;
 
 //PID variables
@@ -64,6 +61,7 @@ uint32_t loop_counter = 0;
 GPS gps;
 bool gps_hold_set = 0;
 float gps_roll_ajt,gps_pitch_ajt;
+
 
 void setup() {
 	Serial.begin(9600);
@@ -126,7 +124,7 @@ void loop()
 		}
 		else
 		{
-			throttle = channel[THROTTLE] - 100;
+			throttle = channel[THROTTLE] - 80;
 		} 
 
 		throttle = constrain(throttle,THROTTLE_MIN_LIMIT,THROTTLE_MAX_LIMIT);
@@ -194,6 +192,12 @@ void loop()
 	// Serial.print(esc[1]);
 	// Serial.print(",");
 	// Serial.println(esc[2]);
+	// Serial.print(imu.Get_AccY());
+	// Serial.print(imu.Roll_angle());
+	// Serial.print(",");
+	// Serial.println(imu.Pitch_angle());
+	// Serial.print(",");
+	// Serial.println(imu.Pitch_Level_Error());
 	// Serial.println(setPoint_yaw);
 }
 void Rx_toValue()
@@ -317,29 +321,26 @@ void Rx_toValue()
 	//Aux3
 	if(IsBetween(channel[AUX_3],990,1050))
 	{
+		if(!imu.auto_level) imu.auto_level = 1;
 	}
 	else if(IsBetween(channel[AUX_3],1490,1550))
 	{
+
 	}
 	else if(IsBetween(channel[AUX_3],1990,2005))
 	{
+		imu.auto_level = 0;
 	}
 
 	//Aux4
 	if(IsBetween(channel[AUX_4],990,1050))
 	{
-		head_lock_set = 0;
 	}
 	else if(IsBetween(channel[AUX_4],1490,1550))
 	{
 	}
 	else if(IsBetween(channel[AUX_4],1990,2005))
 	{
-		if(!head_lock_set)
-		{
-			head_lock_set = 1;
-			heading_lock_course_deviation = imu.Get_Heading();
-		}
 	}
 }
 
@@ -368,7 +369,12 @@ bool StartEngines()
 	}
 
 	//Start engines.
-	else if (IsBetween(channel[THROTTLE],990,1010) && IsBetween(channel[YAW],990,1050)) start_Sequence = 1;
+	else if (IsBetween(channel[THROTTLE],990,1010) && IsBetween(channel[YAW],990,1050))
+	{
+		if(battery_connected && battery_voltage > 1000) start_Sequence = 1;
+		else if (!battery_connected) start_Sequence = 1;
+		
+	} 
 	else if (IsBetween(channel[YAW],1490,1505) && start_Sequence) engineStart = true;
 
 	return engineStart;
@@ -431,11 +437,11 @@ void Calculate_GPS_hold()
 // 			break;
 
 // 			case 30:
-// 			telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
+// 			telemetry.Transmit(String("RLL,") + imu.Roll_angle() + "\n");
 // 			break;
 
 // 			case 40:
-// 			telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
+// 			telemetry.Transmit(String("PTC,") + imu.Pitch_angle() + "\n");
 // 			telemetry.flush();
 // 			break;
 
@@ -516,11 +522,11 @@ void Calculate_GPS_hold()
 // 					break;
 
 // 					case 3:
-// 					telemetry.Transmit(String("RLL,") + imu.Get_GyroX_Angle() + "\n");
+// 					telemetry.Transmit(String("RLL,") + imu.Roll_angle() + "\n");
 // 					break;
 
 // 					case 4:
-// 					telemetry.Transmit(String("PTC,") + imu.Get_GyroY_Angle() + "\n");
+// 					telemetry.Transmit(String("PTC,") + imu.Pitch_angle() + "\n");
 // 					telemetry.flush();
 // 					break;
 

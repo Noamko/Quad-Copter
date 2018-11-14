@@ -5,8 +5,8 @@ TwoWire TWire(2,I2C_FAST_MODE);
 
 float IMU::Pitch_Level_Error() 	{ return pitch_level_ajust; }
 float IMU::Roll_Level_Error() 	{ return roll_level_ajust; }
-float IMU::Get_GyroX_Angle() 	{ return gyro_angle[0]; }
-float IMU::Get_GyroY_Angle() 	{ return gyro_angle[1]; }
+float IMU::Roll_angle() 		{ return roll_angle; }
+float IMU::Pitch_angle() 		{ return pitch_angle; }
 float IMU::Get_pressure() 		{ return LPF_pressure; }
 float IMU::Get_Heading() 		{ return compass_heading; }
 float IMU::Get_refPerssure() 	{ return ref_pressure; }
@@ -145,8 +145,8 @@ void IMU::Compute()
 	gyro_angle[1]  -= gyro_angle[0] * sin(gyro_raw[2] * gyro_time * DEG_TO_RAD);
 
 	//Trim & currections for accelerometer
-	acc_angle[0] -= roll_angle_offset; 		//Roll
-	acc_angle[1] -= pitch_angle_offset; 	//Pitch
+	// acc_angle[0] -= roll_angle_offset; 		//Roll
+	// acc_angle[1] -= pitch_angle_offset; 	//Pitch
 
 	//This make sure that the gyro will stay similer to the acc for long flights.
 	if(acc_angle[0] < 1.0 && acc_angle[0] > -1.0 && acc_angle[1] < 1.0 && acc_angle[1] > -1.0)
@@ -216,7 +216,6 @@ void IMU::Calibrate_IMU()
 	acc_offset[0] = 0;
 	acc_offset[0] = 0;
 	
-	total_acc_vector_offset = 0;
 	// for(uint8_t i=0; i<3; i++){
 	// 	gyro_offset[i] = 0;
 	// 	acc_offset[i] = 0;
@@ -226,11 +225,9 @@ void IMU::Calibrate_IMU()
 		readMPU6050();
 		for(uint8_t axis = 0; axis < 3; axis++)
 		{
-			gyro_offset[axis] += gyro_raw[axis];
-			acc_offset[axis] += acc_raw[axis];
+			gyro_offset[axis] += (float)gyro_raw[axis];
+			acc_offset[axis] += (float)acc_raw[axis];
 		}
-		total_acc_vector = sqrt(sq(acc_raw[0]) + sq(acc_raw[1]) + sq(acc_raw[2])); 
-		total_acc_vector_offset += total_acc_vector;
 		delay(4);
 		TIMER4_BASE->CCR1 = 1000;
 		TIMER4_BASE->CCR2 = 1000;
@@ -245,9 +242,13 @@ void IMU::Calibrate_IMU()
 		gyro_offset[axis] /= CALIBRATION_REP;
 		acc_offset[axis] /= CALIBRATION_REP;
 	}
-	total_acc_vector_offset /= CALIBRATION_REP;
 	ref_pressure = avarage_pressure;
 	if(gyro_offset[0] != 0) calibrated = true;
+
+	// Serial.print("Calibration:");
+	// Serial.print(roll_angle_offset);
+	// Serial.print(",");
+	// Serial.println(acc_offset[0]);
 
 
 	for(int i=0; i< 5000; i++){
@@ -267,8 +268,8 @@ void IMU::Calibrate_IMU()
 	}
 
 	//Calculate the alibration offset and scale values
-	compass_scale_y = ((float)compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[3] - compass_cal_values[2]);
-	compass_scale_z = ((float)compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[5] - compass_cal_values[4]);
+	compass_scale_y = (float)(compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[3] - compass_cal_values[2]);
+	compass_scale_z = (float)(compass_cal_values[1] - compass_cal_values[0]) / (compass_cal_values[5] - compass_cal_values[4]);
 
   	compass_offset_x = (compass_cal_values[1] - compass_cal_values[0]) / 2 - compass_cal_values[1];
   	compass_offset_y = (((float)compass_cal_values[3] - compass_cal_values[2]) / 2 - compass_cal_values[3]) * compass_scale_y;
@@ -312,8 +313,8 @@ void IMU::Calibrate_compass()
 void IMU::reset()
 {
 	readMPU6050();
-	gyro_angle[0] = acc_angle[0];
-	gyro_angle[1] = acc_angle[1];
+	roll_angle = acc_angle[0];
+	pitch_angle = acc_angle[1];
 	yaw_angle = compass_heading;
 }
 

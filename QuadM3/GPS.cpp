@@ -128,6 +128,7 @@ $GNGGA,190339.60,3212.69713,N,03459.21110,E,1,08,1.08,97.5,M,17.7,M,,*7E
 	    
       gps_lat_error_prev = gps_lat_error;
 	    gps_lon_error_prev = gps_lon_error;
+      
     }
   }
 }

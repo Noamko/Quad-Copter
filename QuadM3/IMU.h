@@ -18,8 +18,8 @@ public:
 	float Pitch_Level_Error();
 	float Get_Heading();
 	void Calculate_Heading();
-	float Get_GyroX_Angle();
-	float Get_GyroY_Angle();
+	float Roll_angle();
+	float Pitch_angle();
 	float Get_pressure();
 	float Pressure_from_altitude(float ref_p,float alt);
 	float Get_refPerssure();
@@ -38,6 +38,8 @@ public:
 	float total_acc_vector = 0;
 	float vertical_acceleration_raw = 0;
 	float vertical_acceleration = 0;
+	uint8_t level_test = 0;
+	bool auto_level = true;
 
 
 private:
@@ -80,13 +82,12 @@ private:
 
 	//MPU6050 variables
 	bool calibrated = false;
-	bool auto_level = true;
 	float gyro_data[3];
 	float acc_angle[2];
 	float gyro_angle[2];
 	float roll_angle, pitch_angle,yaw_angle;
 	float gyro_offset[3];
-	int16_t acc_offset[3];
+	float acc_offset[3];
 	float total_acc_vector_offset;
 	float z_velocity;
 	// double gyro_time = 0.0000610687056905589997768402099609375;  // (  250Hz/ gyro scale )
@@ -98,6 +99,7 @@ private:
 	uint8_t gyro_angle_reset_counter = 0;
 
 	 //General
+	 float prev_roll_angle,prev_pitch_angle;
 	 float roll_level_ajust;
 	 float pitch_level_ajust;
 	 float al_mul = 3;
