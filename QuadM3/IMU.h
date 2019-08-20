@@ -102,7 +102,7 @@ private:
 	 float prev_roll_angle,prev_pitch_angle;
 	 float roll_level_ajust;
 	 float pitch_level_ajust;
-	 float al_mul = 3;
+	 float al_mul = 8;
 	 uint32_t prev_dt;
 	 uint32_t dt;
 };
