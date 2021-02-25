@@ -1,4 +1,4 @@
-# Proto Copter
+# QCopter
 
 Personal project made from scratch.
 
