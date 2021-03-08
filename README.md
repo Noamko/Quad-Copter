@@ -1,6 +1,6 @@
 # QCopter
 
-![alt text]https://i.ibb.co/Mh1k6My/Drone-cut.jpg
+![alt text] https://i.ibb.co/Mh1k6My/Drone-cut.jpg
 Personal project made from scratch.
 
 The whole idea of this project is to learn as much as possible & to have fun of course :)
