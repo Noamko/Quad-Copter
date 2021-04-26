@@ -1,5 +1,8 @@
 # QCopter
 
+## Update: as for today im as CS student,
+## the plan is to rewrite this Completely with a self written Scheduler.
+
 Personal project made from scratch.
 
 The whole idea of this project is to learn as much as possible & to have fun of course :)
