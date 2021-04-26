@@ -1,7 +1,7 @@
 # QCopter
 
-## Update: as for today im as CS student,
-## the plan is to rewrite this Completely with a self written Scheduler.
+## Update:
+## Since I learned a lot from my ongoing cs degree, the plan is to rewrite this Completely with a self written Scheduler.
 
 Personal project made from scratch.
 
